@@ -1,5 +1,7 @@
 # Compatibility and provenance
 
+[Русская версия](ru/compatibility.md)
+
 The CLI needs Python 3.12+ and the analyzer needs PHP 8.2+. Docker provides both. The parser dependency is `nikic/php-parser` 5.x, whose upstream license is BSD-3-Clause. The repository itself is MIT. Crapper and Dryer algorithms and EDN formats were studied from their upstream repositories, which identify 0BSD licenses; no upstream implementation code is included here. Preserve dependency license notices in distributions.
 
 The v0.1 parser is tested against plain PHP plus small Laravel, Symfony, and Yii-shaped fixtures. These are syntax samples, not full framework applications. A parser's ability to accept a newer target PHP syntax is separate from the PHP runtime version. The project does not claim Windows support or exact branch coverage.

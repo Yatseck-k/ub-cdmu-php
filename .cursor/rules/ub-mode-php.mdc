@@ -1,7 +1,0 @@
----
-description: PHP quality gates through ub-mode-php
-globs: "**/*.php"
-alwaysApply: false
----
-
-After changing PHP, run configured project tests and `ub-php check --changed --format json`. Review duplicates with `ub-php dry --changed --threshold 0.8`. Keep unknown coverage distinct from zero and report unavailable mutation/UML gates as skipped. Do not lower thresholds to pass checks.

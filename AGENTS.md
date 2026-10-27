@@ -2,7 +2,7 @@
 
 ## Project Structure & Module Organization
 
-The Python CLI and metric logic live in `src/ub_mode_php/`; the read-only AST parser and Composer manifest live in `php/analyzer/`. `bin/ub-php` is the command wrapper. Python tests are in `tests/`, PHP tests in `php/analyzer/tests/`, and small syntax projects in `fixtures/`. Protocol and metric explanations are in `docs/`; agent examples are in `integrations/`. The local `work/` folder is task handoff material and is excluded from Git in this checkout.
+The Python CLI and metric logic live in `src/ub_mode_php/`; the read-only AST parser and Composer manifest live in `php/analyzer/`. `bin/ub-php` is the command wrapper. Python tests are in `tests/`, PHP tests in `php/analyzer/tests/`, and small syntax projects in `fixtures/`. Protocol and metric explanations are in `docs/`. The optional agent skill and integration examples live in the separate `ub-mode-php-skill` repository. The local `work/` folder is task handoff material and is excluded from Git in this checkout.
 
 ## Build, Test, and Development Commands
 

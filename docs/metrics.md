@@ -1,5 +1,7 @@
 # Metric rules
 
+[Русская версия](ru/metrics.md)
+
 ## Crapper
 
 Cyclomatic complexity starts at 1 per function, method, closure, or arrow function. Add 1 for each `if`, `elseif`, `for`, `foreach`, `while`, `do`, `catch`, non-default `case`, non-default `match` arm, ternary, `&&`, `||`, logical `and`/`or`, or `??`. Nested functions and closures receive their own score. Abstract/interface methods have no body and are omitted.
