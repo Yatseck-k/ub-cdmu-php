@@ -8,15 +8,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build test image
-        run: docker build -t ub-mode-php:test .
+        run: docker build -t ub-cdmu-php:test .
       - name: Python tests
-        run: docker run --rm --entrypoint python ub-mode-php:test -m pytest -q
+        run: docker run --rm --entrypoint python ub-cdmu-php:test -m pytest -q
       - name: PHP analyzer tests
-        run: docker run --rm --entrypoint composer ub-mode-php:test test --working-dir=/app/php/analyzer
+        run: docker run --rm --entrypoint composer ub-cdmu-php:test test --working-dir=/app/php/analyzer
       - name: CLI environment
-        run: docker run --rm ub-mode-php:test doctor
+        run: docker run --rm ub-cdmu-php:test doctor
       - name: Fixture quality analysis
-        run: docker run --rm ub-mode-php:test --root /app/fixtures check --format json
+        run: docker run --rm ub-cdmu-php:test --root /app/fixtures check --format json
   macos:
     runs-on: macos-latest
     steps:

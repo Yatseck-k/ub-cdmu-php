@@ -1,4 +1,4 @@
-# ub-mode-php
+# ub-cdmu-php
 
 [English version](README.md)
 
@@ -9,13 +9,13 @@
 Соберите образ из этого репозитория и подключите PHP-проект для анализа:
 
 ```sh
-docker build -t ub-mode-php:dev .
+docker build -t ub-cdmu-php:dev .
 PHP_PROJECT=/path/to/php-project
-docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-mode-php:dev --root /project doctor
-docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-mode-php:dev --root /project check --format json
+docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-cdmu-php:dev --root /project doctor
+docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-cdmu-php:dev --root /project check --format json
 ```
 
-В анализируемом проекте нужен файл `.ub-mode.yaml` либо существующий каталог `src/` или `app/`. Docker записывает отчёты в `.metrics/` внутри подключённого проекта. Чтобы проверить встроенные примеры синтаксиса без подключения другого проекта, выполните `docker run --rm ub-mode-php:dev --root /app/fixtures check --format json`.
+В анализируемом проекте нужен файл `.ub-mode.yaml` либо существующий каталог `src/` или `app/`. Docker записывает отчёты в `.metrics/` внутри подключённого проекта. Чтобы проверить встроенные примеры синтаксиса без подключения другого проекта, выполните `docker run --rm ub-cdmu-php:dev --root /app/fixtures check --format json`.
 
 Для локальной разработки нужны Python 3.12+, PHP 8.2+ и Composer:
 
@@ -33,4 +33,4 @@ composer test --working-dir=php/analyzer
 
 Подробнее: [CLI](docs/ru/cli.md), [правила метрик](docs/ru/metrics.md), [архитектура](docs/ru/architecture.md) и [совместимость](docs/ru/compatibility.md). Infection и UML Viewer запланированы на следующие версии.
 
-Руководство для участников: [AGENTS.ru.md](AGENTS.ru.md). Необязательный скилл `ub-mode` поддерживается отдельно в `ub-mode-php-skill` (в этой рабочей области — `../ub-mode-php-skill`). Он работает с тестами проекта и просмотром кода даже без этого CLI; при установленном CLI агент может использовать измеренные результаты CRAP и Dryer.
+Руководство для участников: [AGENTS.ru.md](AGENTS.ru.md). Необязательный скилл `ub-mode` поддерживается отдельно в `ub-mode-php` (в этой рабочей области — `../ub-mode-php`). Он работает с тестами проекта и просмотром кода даже без этого CLI; при установленном CLI агент может использовать измеренные результаты CRAP и Dryer.

@@ -1,4 +1,4 @@
-# ub-mode-php
+# ub-cdmu-php
 
 [Русская версия](README.ru.md)
 
@@ -9,15 +9,15 @@ Static quality gates for PHP projects. A Python 3.12+ CLI coordinates a PHP 8.2+
 Build the image from this repository, then mount the PHP project to analyze:
 
 ```sh
-docker build -t ub-mode-php:dev .
+docker build -t ub-cdmu-php:dev .
 PHP_PROJECT=/path/to/php-project
-docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-mode-php:dev --root /project doctor
-docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-mode-php:dev --root /project check --format json
+docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-cdmu-php:dev --root /project doctor
+docker run --rm --user "$(id -u):$(id -g)" -v "$PHP_PROJECT:/project" ub-cdmu-php:dev --root /project check --format json
 ```
 
 The project being analyzed needs `.ub-mode.yaml` or existing `src/` or `app/` directories. Docker writes reports to its mounted project under `.metrics/`. For local development with Python 3.12+, PHP 8.2+, and Composer:
 
-To inspect the bundled syntax samples without mounting another project, run `docker run --rm ub-mode-php:dev --root /app/fixtures check --format json`.
+To inspect the bundled syntax samples without mounting another project, run `docker run --rm ub-cdmu-php:dev --root /app/fixtures check --format json`.
 
 ```sh
 python -m pip install -e '.[dev]'
@@ -33,4 +33,4 @@ After installing the CLI locally, run `ub-php check` directly from the PHP proje
 
 See [CLI](docs/cli.md), [metric rules](docs/metrics.md), [architecture](docs/architecture.md), and [compatibility](docs/compatibility.md). Infection and UML Viewer are planned for later releases.
 
-The optional `ub-mode` agent skill is maintained separately in `ub-mode-php-skill` (at `../ub-mode-php-skill` in this workspace). It works with project tests and code review even when this CLI is unavailable; with the CLI installed, agents can use its measured CRAP and Dryer results. `AGENTS.md` remains the contributor guide for this tools repository.
+The optional `ub-mode` agent skill is maintained separately in `ub-mode-php` (at `../ub-mode-php` in this workspace). It works with project tests and code review even when this CLI is unavailable; with the CLI installed, agents can use its measured CRAP and Dryer results. `AGENTS.md` remains the contributor guide for this tools repository.

@@ -2,11 +2,11 @@
 
 ## Project Structure & Module Organization
 
-The Python CLI and metric logic live in `src/ub_mode_php/`; the read-only AST parser and Composer manifest live in `php/analyzer/`. `bin/ub-php` is the command wrapper. Python tests are in `tests/`, PHP tests in `php/analyzer/tests/`, and small syntax projects in `fixtures/`. Protocol and metric explanations are in `docs/`. The optional agent skill and integration examples live in the separate `ub-mode-php-skill` repository. The local `work/` folder is task handoff material and is excluded from Git in this checkout.
+The Python CLI and metric logic live in `src/ub_mode_php/`; the read-only AST parser and Composer manifest live in `php/analyzer/`. `bin/ub-php` is the command wrapper. Python tests are in `tests/`, PHP tests in `php/analyzer/tests/`, and small syntax projects in `fixtures/`. Protocol and metric explanations are in `docs/`. The optional agent skill and integration examples live in the separate `ub-mode-php` repository. The local `work/` folder is task handoff material and is excluded from Git in this checkout.
 
 ## Build, Test, and Development Commands
 
-Use Python 3.12+ and PHP 8.2+. From the repository root, `python -m pip install -e '.[dev]'` installs the CLI and Python test tools; `composer install --working-dir=php/analyzer` installs the parser. Run `python -m pytest` and `composer test --working-dir=php/analyzer`. `ub-php doctor` checks the environment; `ub-php check --format json` analyzes configured PHP paths. Where local runtimes are absent, `docker build -t ub-mode-php:dev .` builds a self-contained image; see `README.md` for the mounted-project command.
+Use Python 3.12+ and PHP 8.2+. From the repository root, `python -m pip install -e '.[dev]'` installs the CLI and Python test tools; `composer install --working-dir=php/analyzer` installs the parser. Run `python -m pytest` and `composer test --working-dir=php/analyzer`. `ub-php doctor` checks the environment; `ub-php check --format json` analyzes configured PHP paths. Where local runtimes are absent, `docker build -t ub-cdmu-php:dev .` builds a self-contained image; see `README.md` for the mounted-project command.
 
 ## Coding Style & Naming Conventions
 

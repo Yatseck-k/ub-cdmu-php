@@ -1,6 +1,6 @@
 {
-  "name": "ub-mode-php/analyzer",
-  "description": "Read-only PHP AST analyzer for ub-mode-php",
+  "name": "ub-cdmu-php/analyzer",
+  "description": "Read-only PHP AST analyzer for ub-cdmu-php",
   "type": "project",
   "license": "MIT",
   "require": {
