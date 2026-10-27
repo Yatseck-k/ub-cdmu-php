@@ -30,7 +30,23 @@ final class Cli
             if (!$changed && $files === []) {
                 throw new InvalidArgumentException('no PHP files found in configured source directories');
             }
-            $analysis = (new Analyzer())->analyze($root, $files);
+            $showProgress = $format === 'text' && $files !== []
+                && function_exists('stream_isatty') && stream_isatty(STDERR);
+            $progressWidth = 0;
+            $progress = null;
+            if ($showProgress) {
+                $this->writeProgress(0, count($files), 'starting', $progressWidth);
+                $progress = function (int $completed, int $total, string $file) use (&$progressWidth): void {
+                    $this->writeProgress($completed, $total, $file, $progressWidth);
+                };
+            }
+            try {
+                $analysis = (new Analyzer())->analyze($root, $files, $progress);
+            } finally {
+                if ($showProgress) {
+                    fwrite(STDERR, "\n");
+                }
+            }
             if ($analysis['diagnostics'] !== []) {
                 $messages = array_map(
                     static fn (array $item): string => $item['file'] . ': ' . $item['message'],
@@ -82,7 +98,17 @@ final class Cli
                     Reports::atomic($directory . '/dry.edn', Reports::dryEdn($candidates));
                 }
             }
-            $this->output($format, $serialized, $files, $entries, $candidates);
+            $this->output(
+                $format,
+                $serialized,
+                $files,
+                $entries,
+                $candidates,
+                $runCrap,
+                $runDry,
+                $crapThreshold,
+                $dryThreshold,
+            );
             $hasFailure = count(array_filter(
                 $entries,
                 static fn (array $entry): bool => $entry['exceeded_threshold'],
@@ -163,25 +189,88 @@ final class Cli
             && $checks['composer_dependencies'] && $checks['project'] ? 0 : 3;
     }
 
-    private function output(string $format, string $json, array $files, array $entries, array $candidates): void
-    {
+    private function output(
+        string $format,
+        string $json,
+        array $files,
+        array $entries,
+        array $candidates,
+        bool $runCrap,
+        bool $runDry,
+        float $crapThreshold,
+        float $dryThreshold,
+    ): void {
         if ($format === 'json') {
             echo $json;
             return;
         }
-        echo 'analyzed ' . count($files) . ' PHP files; ' . count($entries)
-            . ' CRAP entries; ' . count($candidates) . " Dryer candidates\n";
+
+        if ($runCrap) {
+            echo 'CRAP (' . count($entries) . " entries)\n";
+        }
         foreach ($entries as $entry) {
             $value = $entry['crap'] === null ? 'unknown' : sprintf('%.3f', $entry['crap']);
             echo 'CRAP ' . $value . ' CC=' . $entry['complexity'] . ' '
                 . $entry['file'] . ':' . $entry['start_line'] . ' ' . $entry['name'] . "\n";
         }
+
+        $groups = [];
         foreach ($candidates as $candidate) {
             $left = $candidate['left'];
-            $right = $candidate['right'];
-            echo 'DRY ' . sprintf('%.3f', $candidate['score']) . ' '
-                . $left['file'] . ':' . $left['start_line'] . '-' . $left['end_line']
-                . ' ' . $right['file'] . ':' . $right['start_line'] . '-' . $right['end_line'] . "\n";
+            $key = $left['id'] . ':' . sprintf('%.3f', $candidate['score']);
+            $groups[$key]['score'] = $candidate['score'];
+            $groups[$key]['left'] = $left;
+            $groups[$key]['matches'][] = $candidate['right'];
         }
+        if ($runDry) {
+            echo 'DRY (' . count($candidates) . ' pairs)\n';
+        }
+        foreach ($groups as $group) {
+            $left = $group['left'];
+            echo 'DRY ' . sprintf('%.3f', $group['score']) . ' '
+                . $left['file'] . ':' . $left['start_line'] . '-' . $left['end_line']
+                . ' (' . count($group['matches']) . " matches)\n";
+            foreach ($group['matches'] as $match) {
+                echo '  -> ' . $match['file'] . ':' . $match['start_line'] . '-' . $match['end_line'] . "\n";
+            }
+        }
+
+        $unknown = count(array_filter($entries, static fn (array $entry): bool => $entry['coverage'] === null));
+        $failed = count(array_filter($entries, static fn (array $entry): bool => $entry['exceeded_threshold']));
+        $parts = [count($files) . ' PHP files'];
+        $parts[] = $runCrap
+            ? sprintf(
+                'CRAP %d entries (%d unknown, %d >= %.1f)',
+                count($entries),
+                $unknown,
+                $failed,
+                $crapThreshold,
+            )
+            : 'CRAP skipped';
+        $parts[] = $runDry
+            ? sprintf('DRY %d pairs in %d groups (threshold %.2f)', count($candidates), count($groups), $dryThreshold)
+            : 'DRY skipped';
+        echo 'Summary: ' . implode(' | ', $parts) . "\n";
+    }
+
+    private function writeProgress(int $completed, int $total, string $file, int &$lastWidth): void
+    {
+        $barWidth = 24;
+        $percent = $total === 0 ? 100 : (int) floor($completed * 100 / $total);
+        $filled = (int) floor($percent * $barWidth / 100);
+        if (strlen($file) > 60) {
+            $file = '...' . substr($file, -57);
+        }
+        $line = sprintf(
+            "Analyzing [%s%s] %3d%% %d/%d %s",
+            str_repeat('#', $filled),
+            str_repeat('-', $barWidth - $filled),
+            $percent,
+            $completed,
+            $total,
+            $file,
+        );
+        fwrite(STDERR, "\r" . str_pad($line, $lastWidth));
+        $lastWidth = max($lastWidth, strlen($line));
     }
 }

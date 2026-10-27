@@ -20,8 +20,9 @@ final class Analyzer
      *     units: list<array<string, mixed>>,
      *     diagnostics: list<array<string, string>>
      * }
+     * @param (callable(int, int, string): void)|null $progress
      */
-    public function analyze(string $root, array $files): array
+    public function analyze(string $root, array $files, ?callable $progress = null): array
     {
         $this->anonymousSequence = 0;
         $realRoot = realpath($root);
@@ -32,7 +33,8 @@ final class Analyzer
         $units = [];
         $diagnostics = [];
         $seen = [];
-        foreach ($files as $file) {
+        $totalFiles = count($files);
+        foreach ($files as $index => $file) {
             if (
                 !is_string($file) || $file === '' || str_starts_with($file, '/')
                 || str_contains($file, '\\') || str_contains($file, "\0")
@@ -56,6 +58,9 @@ final class Analyzer
                 || !is_file($realFile)
             ) {
                 $diagnostics[] = ['file' => $file, 'message' => 'file is missing or outside project root'];
+                if ($progress !== null) {
+                    $progress($index + 1, $totalFiles, $file);
+                }
                 continue;
             }
             try {
@@ -69,6 +74,9 @@ final class Analyzer
                 $diagnostics[] = ['file' => $file, 'message' => $error->getMessage()];
             } catch (InvalidArgumentException $error) {
                 $diagnostics[] = ['file' => $file, 'message' => $error->getMessage()];
+            }
+            if ($progress !== null) {
+                $progress($index + 1, $totalFiles, $file);
             }
         }
         usort($units, static fn (array $a, array $b): int =>
