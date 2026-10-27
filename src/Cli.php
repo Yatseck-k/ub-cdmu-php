@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace UbModePhp;
@@ -31,13 +32,18 @@ final class Cli
             }
             $analysis = (new Analyzer())->analyze($root, $files);
             if ($analysis['diagnostics'] !== []) {
-                $messages = array_map(static fn (array $item): string => $item['file'] . ': ' . $item['message'], $analysis['diagnostics']);
+                $messages = array_map(
+                    static fn (array $item): string => $item['file'] . ': ' . $item['message'],
+                    $analysis['diagnostics'],
+                );
                 throw new RuntimeException(implode('; ', $messages));
             }
             $runCrap = in_array($command, ['check', 'crap'], true) && $config['crapper']['enabled'];
             $runDry = in_array($command, ['check', 'dry'], true) && $config['dryer']['enabled'];
-            $crapThreshold = (float) ($command === 'crap' && $threshold !== null ? $threshold : $config['crapper']['threshold']);
-            $dryThreshold = (float) ($command === 'dry' && $threshold !== null ? $threshold : $config['dryer']['threshold']);
+            $crapThreshold = (float) ($command === 'crap' && $threshold !== null
+                ? $threshold : $config['crapper']['threshold']);
+            $dryThreshold = (float) ($command === 'dry' && $threshold !== null
+                ? $threshold : $config['dryer']['threshold']);
             if ($runDry && $dryThreshold > 1) {
                 throw new InvalidArgumentException('Dryer threshold must be between 0 and 1');
             }
@@ -49,8 +55,20 @@ final class Cli
                 }
             }
             $entries = $runCrap ? Metrics::crap($analysis['units'], $coverage, $crapThreshold) : [];
-            $candidates = $runDry ? Metrics::dry($analysis['units'], $dryThreshold, $config['dryer']['min_lines'], $config['dryer']['min_nodes']) : [];
-            $report = ['schema_version' => self::VERSION, 'tool' => $command, 'entries' => $entries, 'candidates' => $candidates, 'diagnostics' => []];
+            $candidates = $runDry
+                ? Metrics::dry(
+                    $analysis['units'],
+                    $dryThreshold,
+                    $config['dryer']['min_lines'],
+                    $config['dryer']['min_nodes'],
+                ) : [];
+            $report = [
+                'schema_version' => self::VERSION,
+                'tool' => $command,
+                'entries' => $entries,
+                'candidates' => $candidates,
+                'diagnostics' => [],
+            ];
             $serialized = Reports::json($report);
             $directory = $root . '/' . $config['reports']['directory'];
             if (in_array('json', $config['reports']['formats'], true)) {
@@ -65,8 +83,11 @@ final class Cli
                 }
             }
             $this->output($format, $serialized, $files, $entries, $candidates);
-            return in_array('exceeded_crap_threshold', $config['quality']['fail_on'], true)
-                && count(array_filter($entries, static fn (array $entry): bool => $entry['exceeded_threshold'])) > 0 ? 2 : 0;
+            $hasFailure = count(array_filter(
+                $entries,
+                static fn (array $entry): bool => $entry['exceeded_threshold'],
+            )) > 0;
+            return in_array('exceeded_crap_threshold', $config['quality']['fail_on'], true) && $hasFailure ? 2 : 0;
         } catch (Throwable $error) {
             fwrite(STDERR, 'ub-php: ' . $error->getMessage() . "\n");
             return 3;
@@ -104,7 +125,10 @@ final class Cli
                 $changed = true;
             } elseif ($command !== null && $command !== 'doctor' && $argument === '--threshold') {
                 $value = $arguments[++$index] ?? null;
-                if ($command === 'check' || $value === null || !is_numeric($value) || !is_finite((float) $value) || (float) $value <= 0) {
+                if (
+                    $command === 'check' || $value === null || !is_numeric($value)
+                    || !is_finite((float) $value) || (float) $value <= 0
+                ) {
                     throw new InvalidArgumentException('--threshold applies to crap or dry and must be positive');
                 }
                 $threshold = (float) $value;
@@ -122,9 +146,10 @@ final class Cli
     {
         $checks = [
             'php_version_id' => PHP_VERSION_ID,
-            'php_supported' => PHP_VERSION_ID >= 80200,
+            'php_supported' => version_compare(PHP_VERSION, '8.2.0', '>='),
             'analyzer' => class_exists(Analyzer::class),
-            'composer_dependencies' => class_exists(\PhpParser\ParserFactory::class) && class_exists(\Symfony\Component\Yaml\Yaml::class),
+            'composer_dependencies' => class_exists(\PhpParser\ParserFactory::class)
+                && class_exists(\Symfony\Component\Yaml\Yaml::class),
             'project' => is_dir($root),
         ];
         if ($format === 'json') {
@@ -134,7 +159,8 @@ final class Cli
                 echo $key . ': ' . (is_bool($value) ? ($value ? 'true' : 'false') : $value) . "\n";
             }
         }
-        return $checks['php_supported'] && $checks['analyzer'] && $checks['composer_dependencies'] && $checks['project'] ? 0 : 3;
+        return $checks['php_supported'] && $checks['analyzer']
+            && $checks['composer_dependencies'] && $checks['project'] ? 0 : 3;
     }
 
     private function output(string $format, string $json, array $files, array $entries, array $candidates): void
@@ -143,15 +169,18 @@ final class Cli
             echo $json;
             return;
         }
-        echo 'analyzed ' . count($files) . ' PHP files; ' . count($entries) . ' CRAP entries; ' . count($candidates) . " Dryer candidates\n";
+        echo 'analyzed ' . count($files) . ' PHP files; ' . count($entries)
+            . ' CRAP entries; ' . count($candidates) . " Dryer candidates\n";
         foreach ($entries as $entry) {
             $value = $entry['crap'] === null ? 'unknown' : sprintf('%.3f', $entry['crap']);
-            echo 'CRAP ' . $value . ' CC=' . $entry['complexity'] . ' ' . $entry['file'] . ':' . $entry['start_line'] . ' ' . $entry['name'] . "\n";
+            echo 'CRAP ' . $value . ' CC=' . $entry['complexity'] . ' '
+                . $entry['file'] . ':' . $entry['start_line'] . ' ' . $entry['name'] . "\n";
         }
         foreach ($candidates as $candidate) {
             $left = $candidate['left'];
             $right = $candidate['right'];
-            echo 'DRY ' . sprintf('%.3f', $candidate['score']) . ' ' . $left['file'] . ':' . $left['start_line'] . '-' . $left['end_line']
+            echo 'DRY ' . sprintf('%.3f', $candidate['score']) . ' '
+                . $left['file'] . ':' . $left['start_line'] . '-' . $left['end_line']
                 . ' ' . $right['file'] . ':' . $right['start_line'] . '-' . $right['end_line'] . "\n";
         }
     }

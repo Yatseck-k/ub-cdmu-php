@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace UbModePhp;
@@ -21,7 +22,10 @@ final class SourceFiles
         $selected = [];
         foreach ($paths as $path) {
             $real = realpath($realRoot . '/' . $path);
-            if ($real === false || !str_starts_with($real, $realRoot . DIRECTORY_SEPARATOR) || !is_file($real) || pathinfo($path, PATHINFO_EXTENSION) !== 'php') {
+            if (
+                $real === false || !str_starts_with($real, $realRoot . DIRECTORY_SEPARATOR)
+                || !is_file($real) || pathinfo($path, PATHINFO_EXTENSION) !== 'php'
+            ) {
                 continue;
             }
             $relative = str_replace(DIRECTORY_SEPARATOR, '/', substr($real, strlen($realRoot) + 1));
@@ -43,7 +47,9 @@ final class SourceFiles
             if (!is_dir($directory)) {
                 continue;
             }
-            $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS));
+            $iterator = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($directory, FilesystemIterator::SKIP_DOTS),
+            );
             foreach ($iterator as $file) {
                 if ($file->isFile() && $file->getExtension() === 'php') {
                     $paths[] = substr($file->getPathname(), strlen($root) + 1);
@@ -91,7 +97,10 @@ final class SourceFiles
             return false;
         }
         foreach ($exclusions as $prefix) {
-            if ($path === $prefix || str_starts_with($path, $prefix . '/') || str_contains('/' . $path, '/' . $prefix . '/')) {
+            if (
+                $path === $prefix || str_starts_with($path, $prefix . '/')
+                || str_contains('/' . $path, '/' . $prefix . '/')
+            ) {
                 return false;
             }
         }

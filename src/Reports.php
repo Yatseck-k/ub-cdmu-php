@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace UbModePhp;
@@ -9,14 +10,19 @@ final class Reports
 {
     public static function json(array $report): string
     {
-        return json_encode(self::ordered($report), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRESERVE_ZERO_FRACTION) . "\n";
+        $options = JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            | JSON_PRESERVE_ZERO_FRACTION;
+        return json_encode(self::ordered($report), $options) . "\n";
     }
 
     public static function crapEdn(array $entries): string
     {
         $records = [];
         foreach ($entries as $entry) {
-            if (!in_array($entry['kind'], ['function', 'method'], true) || str_contains($entry['namespace'], 'anonymous@')) {
+            if (
+                !in_array($entry['kind'], ['function', 'method'], true)
+                || str_contains($entry['namespace'], 'anonymous@')
+            ) {
                 continue;
             }
             $records[] = '{:name ' . self::string($entry['name']) . ' :namespace ' . self::string($entry['namespace'])
@@ -33,7 +39,8 @@ final class Reports
             $spans = [];
             foreach (['left', 'right'] as $side) {
                 $span = $candidate[$side];
-                $spans[] = ':' . $side . ' {:file ' . self::string($span['file']) . ' :start-line ' . $span['start_line'] . ' :end-line ' . $span['end_line'] . '}';
+                $spans[] = ':' . $side . ' {:file ' . self::string($span['file'])
+                    . ' :start-line ' . $span['start_line'] . ' :end-line ' . $span['end_line'] . '}';
             }
             $records[] = '{:score ' . self::number($candidate['score']) . ' :language "php" ' . implode(' ', $spans)
                 . ' :left-nodes ' . $candidate['left_nodes'] . ' :right-nodes ' . $candidate['right_nodes'] . '}';

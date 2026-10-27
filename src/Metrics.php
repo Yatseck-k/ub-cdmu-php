@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace UbModePhp;
@@ -10,7 +11,9 @@ final class Metrics
         $entries = [];
         foreach ($units as $unit) {
             $percent = Clover::forUnit($unit, $coverage);
-            $score = $percent === null ? null : (float) ($unit['complexity'] ** 2 * (1 - $percent / 100) ** 3 + $unit['complexity']);
+            $score = $percent === null
+                ? null
+                : (float) ($unit['complexity'] ** 2 * (1 - $percent / 100) ** 3 + $unit['complexity']);
             $entries[] = $unit + [
                 'coverage' => $percent,
                 'coverage_type' => 'line',
@@ -18,14 +21,19 @@ final class Metrics
                 'exceeded_threshold' => $score !== null && $score >= $threshold,
             ];
         }
-        usort($entries, static fn (array $a, array $b): int => [$a['file'], $a['start_line'], $a['id']] <=> [$b['file'], $b['start_line'], $b['id']]);
+        usort($entries, static fn (array $a, array $b): int =>
+            [$a['file'], $a['start_line'], $a['id']] <=> [$b['file'], $b['start_line'], $b['id']]);
         return $entries;
     }
 
     public static function dry(array $units, float $threshold, int $minLines, int $minNodes): array
     {
-        $eligible = array_values(array_filter($units, static fn (array $unit): bool => in_array($unit['kind'], ['function', 'method'], true)
-            && $unit['end_line'] - $unit['start_line'] + 1 >= $minLines && $unit['node_count'] >= $minNodes));
+        $eligible = array_values(array_filter(
+            $units,
+            static fn (array $unit): bool => in_array($unit['kind'], ['function', 'method'], true)
+                && $unit['end_line'] - $unit['start_line'] + 1 >= $minLines
+                && $unit['node_count'] >= $minNodes,
+        ));
         $result = [];
         foreach ($eligible as $index => $left) {
             for ($other = $index + 1; $other < count($eligible); $other++) {

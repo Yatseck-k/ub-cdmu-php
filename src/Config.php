@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace UbModePhp;
@@ -11,8 +12,16 @@ final class Config
 {
     private const DEFAULTS = [
         'version' => 1,
-        'project' => ['language' => 'php', 'source' => ['src', 'app'], 'exclude' => ['vendor', 'tests', 'var', 'storage', 'bootstrap/cache', '.metrics']],
-        'crapper' => ['enabled' => true, 'threshold' => 10, 'coverage' => ['format' => 'clover', 'path' => 'coverage.xml', 'missing' => 'unknown']],
+        'project' => [
+            'language' => 'php',
+            'source' => ['src', 'app'],
+            'exclude' => ['vendor', 'tests', 'var', 'storage', 'bootstrap/cache', '.metrics'],
+        ],
+        'crapper' => [
+            'enabled' => true,
+            'threshold' => 10,
+            'coverage' => ['format' => 'clover', 'path' => 'coverage.xml', 'missing' => 'unknown'],
+        ],
         'dryer' => ['enabled' => true, 'threshold' => 0.82, 'min_lines' => 4, 'min_nodes' => 20],
         'reports' => ['formats' => ['json', 'edn'], 'directory' => '.metrics'],
         'quality' => ['fail_on' => ['exceeded_crap_threshold']],
@@ -60,7 +69,11 @@ final class Config
 
     public static function relativePath(mixed $value): string
     {
-        if (!is_string($value) || $value === '' || str_starts_with($value, '/') || str_contains($value, '\\') || str_contains($value, "\0") || in_array('', explode('/', $value), true) || in_array('.', explode('/', $value), true) || in_array('..', explode('/', $value), true)) {
+        if (
+            !is_string($value) || $value === '' || str_starts_with($value, '/')
+            || str_contains($value, '\\') || str_contains($value, "\0")
+            || array_intersect(explode('/', $value), ['', '.', '..']) !== []
+        ) {
             throw new InvalidArgumentException('path must be relative to the project');
         }
         return $value;
@@ -96,7 +109,10 @@ final class Config
         }
         $config['crapper']['coverage']['path'] = self::relativePath($coverage['path']);
         $threshold = $config['dryer']['threshold'];
-        if ((!is_int($threshold) && !is_float($threshold)) || !is_finite((float) $threshold) || $threshold < 0 || $threshold > 1) {
+        if (
+            (!is_int($threshold) && !is_float($threshold))
+            || !is_finite((float) $threshold) || $threshold < 0 || $threshold > 1
+        ) {
             throw new InvalidArgumentException('dryer.threshold must be between 0 and 1');
         }
         foreach (['min_lines', 'min_nodes'] as $key) {
@@ -115,7 +131,14 @@ final class Config
 
     private static function subset(mixed $values, array $allowed): bool
     {
-        return is_array($values) && array_is_list($values)
-            && count(array_filter($values, static fn (mixed $value): bool => !is_string($value) || !in_array($value, $allowed, true))) === 0;
+        if (!is_array($values) || !array_is_list($values)) {
+            return false;
+        }
+        foreach ($values as $value) {
+            if (!is_string($value) || !in_array($value, $allowed, true)) {
+                return false;
+            }
+        }
+        return true;
     }
 }

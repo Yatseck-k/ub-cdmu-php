@@ -1,5 +1,8 @@
 <?php
+
 declare(strict_types=1);
+
+require __DIR__ . '/support.php';
 
 $package = realpath(dirname(__DIR__));
 $consumer = sys_get_temp_dir() . '/ub-cdmu-consumer-' . bin2hex(random_bytes(6));
@@ -13,7 +16,8 @@ file_put_contents($consumer . '/composer.json', json_encode([
 ], JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT));
 
 try {
-    foreach ([
+    foreach (
+        [
         ['composer', 'install', '--no-interaction', '--prefer-dist', '--no-progress'],
         [$consumer . '/vendor/bin/ub-php', 'doctor', '--format', 'json'],
         [$consumer . '/vendor/bin/ub-php', 'check', '--format', 'json'],
@@ -21,16 +25,10 @@ try {
         [$consumer . '/vendor/bin/ub-php', 'dry', '--format', 'json'],
         ['git', 'init', '-q'],
         [$consumer . '/vendor/bin/ub-php', 'check', '--changed', '--format', 'json'],
-    ] as $command) {
-        $process = proc_open($command, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, $consumer);
-        if (!is_resource($process)) {
-            throw new RuntimeException('cannot run consumer command');
-        }
-        $output = stream_get_contents($pipes[1]);
-        $error = stream_get_contents($pipes[2]);
-        fclose($pipes[1]);
-        fclose($pipes[2]);
-        if (proc_close($process) !== 0) {
+        ] as $command
+    ) {
+        [$status, $output, $error] = command($command, $consumer);
+        if ($status !== 0) {
             throw new RuntimeException('consumer command failed: ' . implode(' ', $command) . "\n" . $error);
         }
         if (in_array('check', $command, true)) {
@@ -39,15 +37,14 @@ try {
                 throw new RuntimeException('installed binary returned invalid analysis');
             }
         }
-        if (in_array('dry', $command, true) && count(json_decode($output, true, 512, JSON_THROW_ON_ERROR)['candidates']) !== 1) {
-            throw new RuntimeException('installed binary did not find the duplicate');
+        if (in_array('dry', $command, true)) {
+            $report = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
+            if (count($report['candidates']) !== 1) {
+                throw new RuntimeException('installed binary did not find the duplicate');
+            }
         }
     }
     echo "Composer consumer test passed\n";
 } finally {
-    $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($consumer, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
-    foreach ($iterator as $item) {
-        $item->isDir() && !$item->isLink() ? rmdir($item->getPathname()) : unlink($item->getPathname());
-    }
-    rmdir($consumer);
+    removeTree($consumer);
 }

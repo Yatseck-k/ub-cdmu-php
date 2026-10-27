@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace UbModePhp\Analyzer;
@@ -12,8 +13,13 @@ final class Analyzer
 {
     private int $anonymousSequence = 0;
 
-    /** @param list<string> $files
-     *  @return array{schema_version: string, units: list<array<string, mixed>>, diagnostics: list<array<string, string>>}
+    /**
+     * @param list<mixed> $files
+     * @return array{
+     *     schema_version: string,
+     *     units: list<array<string, mixed>>,
+     *     diagnostics: list<array<string, string>>
+     * }
      */
     public function analyze(string $root, array $files): array
     {
@@ -27,7 +33,10 @@ final class Analyzer
         $diagnostics = [];
         $seen = [];
         foreach ($files as $file) {
-            if (!is_string($file) || $file === '' || str_starts_with($file, '/') || str_contains($file, '\\') || str_contains($file, "\0")) {
+            if (
+                !is_string($file) || $file === '' || str_starts_with($file, '/')
+                || str_contains($file, '\\') || str_contains($file, "\0")
+            ) {
                 throw new InvalidArgumentException('files must contain relative POSIX paths');
             }
             if (isset($seen[$file])) {
@@ -35,11 +44,17 @@ final class Analyzer
             }
             $seen[$file] = true;
             $parts = explode('/', $file);
-            if (in_array('..', $parts, true) || in_array('.', $parts, true) || pathinfo($file, PATHINFO_EXTENSION) !== 'php') {
+            if (
+                in_array('..', $parts, true) || in_array('.', $parts, true)
+                || pathinfo($file, PATHINFO_EXTENSION) !== 'php'
+            ) {
                 throw new InvalidArgumentException('invalid PHP file path');
             }
             $realFile = realpath($realRoot . '/' . $file);
-            if ($realFile === false || !str_starts_with($realFile, $realRoot . DIRECTORY_SEPARATOR) || !is_file($realFile)) {
+            if (
+                $realFile === false || !str_starts_with($realFile, $realRoot . DIRECTORY_SEPARATOR)
+                || !is_file($realFile)
+            ) {
                 $diagnostics[] = ['file' => $file, 'message' => 'file is missing or outside project root'];
                 continue;
             }
@@ -56,16 +71,24 @@ final class Analyzer
                 $diagnostics[] = ['file' => $file, 'message' => $error->getMessage()];
             }
         }
-        usort($units, static fn (array $a, array $b): int => [$a['file'], $a['start_line'], $a['id']] <=> [$b['file'], $b['start_line'], $b['id']]);
-        usort($diagnostics, static fn (array $a, array $b): int => [$a['file'], $a['message']] <=> [$b['file'], $b['message']]);
+        usort($units, static fn (array $a, array $b): int =>
+            [$a['file'], $a['start_line'], $a['id']] <=> [$b['file'], $b['start_line'], $b['id']]);
+        usort($diagnostics, static fn (array $a, array $b): int =>
+            [$a['file'], $a['message']] <=> [$b['file'], $b['message']]);
         return ['schema_version' => '1.0', 'units' => $units, 'diagnostics' => $diagnostics];
     }
 
-    /** @param array<Node>|Node $nodes
-     *  @param list<array<string, mixed>> $units
+    /**
+     * @param array<mixed>|Node $nodes
+     * @param list<array<string, mixed>> $units
      */
-    private function discover(array|Node $nodes, string $file, string $namespace, ?string $className, array &$units): void
-    {
+    private function discover(
+        array|Node $nodes,
+        string $file,
+        string $namespace,
+        ?string $className,
+        array &$units,
+    ): void {
         if (is_array($nodes)) {
             foreach ($nodes as $node) {
                 if ($node instanceof Node) {
@@ -79,7 +102,8 @@ final class Analyzer
             return;
         }
         if ($nodes instanceof Node\Stmt\ClassLike) {
-            $name = $nodes->name?->toString() ?? 'anonymous@' . $nodes->getStartLine() . '#' . ++$this->anonymousSequence;
+            $name = $nodes->name?->toString()
+                ?? 'anonymous@' . $nodes->getStartLine() . '#' . ++$this->anonymousSequence;
             $this->discover($nodes->stmts, $file, $namespace, $name, $units);
             return;
         }
@@ -104,7 +128,10 @@ final class Analyzer
             $body = $nodes->expr;
         }
         if ($kind !== null) {
-            $scope = implode('\\', array_filter([$namespace, $className], static fn (?string $part): bool => $part !== null && $part !== ''));
+            $scope = implode('\\', array_filter(
+                [$namespace, $className],
+                static fn (?string $part): bool => $part !== null && $part !== '',
+            ));
             [$complexity, $nodeCount, $features] = $this->measure($body);
             $line = $nodes->getStartLine();
             $units[] = [
@@ -134,7 +161,15 @@ final class Analyzer
         $complexity = 1;
         $count = 0;
         $features = [];
-        $visit = function (array|Node $value, string $parent = '') use (&$visit, &$complexity, &$count, &$features): void {
+        $visit = function (
+            array|Node $value,
+            string $parent = ''
+        ) use (
+            &$visit,
+            &$complexity,
+            &$count,
+            &$features,
+        ): void {
             if (is_array($value)) {
                 foreach ($value as $item) {
                     if ($item instanceof Node) {
@@ -152,7 +187,11 @@ final class Analyzer
             $features[] = 'edge:' . $parent . '/' . $type;
             if ($value instanceof Node\Expr\FuncCall && $value->name instanceof Node\Name) {
                 $features[] = 'call:' . strtolower($value->name->toString());
-            } elseif ($value instanceof Node\Expr\MethodCall || $value instanceof Node\Expr\NullsafeMethodCall || $value instanceof Node\Expr\StaticCall) {
+            } elseif (
+                $value instanceof Node\Expr\MethodCall
+                || $value instanceof Node\Expr\NullsafeMethodCall
+                || $value instanceof Node\Expr\StaticCall
+            ) {
                 if ($value->name instanceof Node\Identifier) {
                     $features[] = 'call:' . strtolower($value->name->toString());
                 }
