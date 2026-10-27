@@ -1,0 +1,21 @@
+{
+  "name": "yatseck-k/ub-cdmu-php",
+  "description": "Static CRAP and structural duplication checks for PHP projects",
+  "type": "library",
+  "license": "MIT",
+  "require": {
+    "php": "^8.2",
+    "ext-dom": "*",
+    "ext-json": "*",
+    "nikic/php-parser": "^5.0",
+    "symfony/yaml": "^7.4"
+  },
+  "autoload": {
+    "psr-4": {"UbModePhp\\": "src/"}
+  },
+  "bin": ["bin/ub-php"],
+  "scripts": {
+    "test": ["php tests/analyzer.php", "php tests/run.php"],
+    "test-consumer": "php tests/consumer.php"
+  }
+}

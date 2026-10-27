@@ -5,7 +5,7 @@ require dirname(__DIR__) . '/vendor/autoload.php';
 
 use UbModePhp\Analyzer\Analyzer;
 
-$root = realpath(dirname(__DIR__, 3) . '/fixtures');
+$root = realpath(dirname(__DIR__) . '/fixtures');
 if ($root === false) {
     throw new RuntimeException('fixtures missing');
 }

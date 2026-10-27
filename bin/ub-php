@@ -1,4 +1,7 @@
-#!/usr/bin/env python3
-from ub_mode_php.cli import main
+#!/usr/bin/env php
+<?php
+declare(strict_types=1);
 
-raise SystemExit(main())
+require dirname(__DIR__) . '/vendor/autoload.php';
+
+exit((new UbModePhp\Cli())->run(array_slice($argv, 1)));
