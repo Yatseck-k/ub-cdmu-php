@@ -1,0 +1,22 @@
+version: 1
+project:
+  language: php
+  source: [src, app]
+  exclude: [vendor, tests, var, storage, bootstrap/cache, .metrics]
+crapper:
+  enabled: true
+  threshold: 10
+  coverage:
+    format: clover
+    path: coverage.xml
+    missing: unknown
+dryer:
+  enabled: true
+  threshold: 0.82
+  min_lines: 4
+  min_nodes: 20
+reports:
+  formats: [json, edn]
+  directory: .metrics
+quality:
+  fail_on: [exceeded_crap_threshold]

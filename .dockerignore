@@ -1,0 +1,8 @@
+.git
+.idea
+.venv
+.metrics
+work
+php/analyzer/vendor
+__pycache__
+.pytest_cache
