@@ -8,8 +8,8 @@ use RuntimeException;
 use UbModePhp\Analyzer\Analyzer;
 use UbModePhp\Config;
 use UbModePhp\Progress;
-use UbModePhp\Reports;
 use UbModePhp\ReportRetention;
+use UbModePhp\Reports;
 use UbModePhp\SourceFiles;
 use UbModePhp\TextReport;
 
@@ -26,7 +26,7 @@ final class MutationCommand
         if ($analysis['diagnostics'] !== []) {
             throw new RuntimeException(Reports::json($analysis['diagnostics']));
         }
-        $fingerprints = InfectionReport::fingerprints($root, $config);
+        $fingerprints = InputFingerprint::compute($root, $config);
         $progress->update(1, 1);
         $raw = "null\n";
         $log = "No changed PHP files; Infection was not run.\n";
@@ -43,7 +43,7 @@ final class MutationCommand
                 $progress->stage(3, 'Reading mutation result');
                 ['summary' => $summary, 'mutants' => $mutants] = InfectionReport::normalize($raw, $root, $analysis['units'], $files);
                 $currentConfig = Config::load($root, $options['config_path'] ?? null);
-                if ($fingerprints !== InfectionReport::fingerprints($root, $currentConfig)) {
+                if ($fingerprints !== InputFingerprint::compute($root, $currentConfig)) {
                     throw new RuntimeException('source, tests or configuration changed during mutation run; result not published');
                 }
                 $progress->update(1, 1);
@@ -104,9 +104,15 @@ final class MutationCommand
             echo $options['format'] === 'json' ? $json : TextReport::tool('mutate', $status, $code, [
                 'Scope: ' . count($files) . ' PHP files | Infection ' . ($version ?? 'not run'),
                 'MSI: ' . $msi . ' | covered MSI: ' . ($summary['covered_msi'] === null ? 'unknown' : sprintf('%.2f%%', $summary['covered_msi'])),
-                sprintf('Mutants: %d total | %d killed | %d survived | %d uncovered | %d timeout | %d errors',
-                    $summary['total'], $summary['killed'], $summary['survived'], $summary['uncovered'], $summary['timeout'],
-                    $summary['error'] + $summary['syntax_error']),
+                sprintf(
+                    'Mutants: %d total | %d killed | %d survived | %d uncovered | %d timeout | %d errors',
+                    $summary['total'],
+                    $summary['killed'],
+                    $summary['survived'],
+                    $summary['uncovered'],
+                    $summary['timeout'],
+                    $summary['error'] + $summary['syntax_error']
+                ),
                 sprintf('Other: %d skipped | %d ignored | %d syntax errors', $summary['skipped'], $summary['ignored'], $summary['syntax_error']),
                 'MSI threshold: ' . ($minimum ?? 'none'),
             ], $findings, $paths, $actions, $options['verbose']);

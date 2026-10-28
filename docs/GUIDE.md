@@ -13,9 +13,9 @@ Full details are in the [reference guide](README.md). This page is a quick start
 
 ## Requirements
 
-- PHP 8.2+ and Composer 2 (extensions `dom`, `json`, `mbstring`).
+- PHP 8.2+ and Composer 2 (extensions `dom`, `json`, `mbstring`, `pcntl`, `posix`; Linux/macOS).
 - Git — only for the `--changed` flag.
-- For mutation testing also: Infection 0.29.14, PHPUnit, a coverage driver (Xdebug or PCOV), and the `posix` and `pcntl` extensions (Linux/macOS).
+- For mutation testing also: Infection 0.29.14, PHPUnit and a coverage driver (Xdebug or PCOV).
 
 ## Installation
 

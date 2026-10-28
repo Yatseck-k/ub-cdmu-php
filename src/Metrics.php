@@ -13,7 +13,7 @@ final class Metrics
             $percent = Clover::forUnit($unit, $coverage);
             $score = $percent === null
                 ? null
-                : (float) ($unit['complexity'] ** 2 * (1 - $percent / 100) ** 3 + $unit['complexity']);
+                : $unit['complexity'] ** 2 * (1 - $percent / 100) ** 3 + $unit['complexity'];
             $entries[] = $unit + [
                 'coverage' => $percent,
                 'coverage_type' => 'line',
@@ -26,15 +26,21 @@ final class Metrics
         return $entries;
     }
 
-    /** @param (callable(int, int): void)|null $progress */
+    /**
+     * @param array<array<string, mixed>> $units
+     * @param float $threshold
+     * @param int $minLines
+     * @param int $minNodes
+     * @param (callable(int, int): void)|null $progress
+     * @return array
+     */
     public static function dry(
         array $units,
         float $threshold,
         int $minLines,
         int $minNodes,
         ?callable $progress = null,
-    ): array
-    {
+    ): array {
         $eligible = array_values(array_filter(
             $units,
             static fn (array $unit): bool => in_array($unit['kind'], ['function', 'method'], true)
@@ -46,8 +52,9 @@ final class Metrics
             $progress(0, $total);
         }
         $result = [];
+        $eligibleCount = count($eligible);
         foreach ($eligible as $index => $left) {
-            for ($other = $index + 1; $other < count($eligible); $other++) {
+            for ($other = $index + 1; $other < $eligibleCount; $other++) {
                 $right = $eligible[$other];
                 if ($left['kind'] !== $right['kind'] || $left['id'] === $right['id']) {
                     continue;

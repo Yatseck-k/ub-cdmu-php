@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace UbModePhp;
 
-final class TerminalStyle
+final readonly class TerminalStyle
 {
     private bool $color;
 

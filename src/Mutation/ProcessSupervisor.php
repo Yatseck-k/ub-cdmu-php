@@ -16,8 +16,10 @@ final class ProcessSupervisor
             exit(125);
         }
         pcntl_async_signals(true);
-        pcntl_signal(SIGTERM, static function (): void {});
-        pcntl_signal(SIGINT, static function (): void {});
+        pcntl_signal(SIGTERM, static function (): void {
+        });
+        pcntl_signal(SIGINT, static function (): void {
+        });
         $owner = posix_getppid();
         $control = stream_socket_pair(STREAM_PF_UNIX, STREAM_SOCK_STREAM, STREAM_IPPROTO_IP);
         if ($control === false) {
@@ -31,11 +33,11 @@ final class ProcessSupervisor
         if ($guardian === 0) {
             fclose($control[0]);
             fwrite($control[1], "ready\n");
-            // Only supervisor owns the other endpoint. A live group member reserves
-            // the group even when the leader dies; no historical PID is signaled.
+            // Only the supervisor owns the other endpoint; a live group member reserves the group, so no old PID is signaled.
             while (!feof($control[1])) {
                 fread($control[1], 1);
             }
+            self::removeConfiguration($arguments);
             posix_kill(-posix_getpgrp(), SIGKILL);
             exit(125);
         }
@@ -73,8 +75,10 @@ final class ProcessSupervisor
             if (!$finished && pcntl_waitpid($child, $status, WNOHANG) === $child) {
                 $exit = pcntl_wifexited($status) ? pcntl_wexitstatus($status) : 128 + pcntl_wtermsig($status);
                 $temporary = $arguments[2] . '.tmp';
-                if (file_put_contents($temporary, json_encode(['exit' => $exit], JSON_THROW_ON_ERROR)) === false
-                    || !rename($temporary, $arguments[2])) {
+                if (
+                    file_put_contents($temporary, json_encode(['exit' => $exit], JSON_THROW_ON_ERROR)) === false
+                    || !rename($temporary, $arguments[2])
+                ) {
                     fwrite(STDERR, "cannot publish engine exit status\n");
                     exit(125);
                 }
@@ -82,6 +86,7 @@ final class ProcessSupervisor
             }
             if (posix_getppid() !== $owner) {
                 // Parent disappeared. This live leader still owns its own group.
+                self::removeConfiguration($arguments);
                 posix_kill(-posix_getpid(), SIGKILL);
                 exit(125);
             }
@@ -89,7 +94,22 @@ final class ProcessSupervisor
         }
     }
 
-    /** Signal only an active owned child; never recover ownership from an old pid file. */
+    private static function removeConfiguration(array $arguments): void
+    {
+        foreach (array_slice($arguments, 3) as $argument) {
+            if (str_starts_with($argument, '--configuration=')) {
+                @unlink(substr($argument, strlen('--configuration=')));
+            }
+        }
+    }
+
+    /**
+     * Signals only an active owned child; an old pid file never restores ownership.
+     *
+     * @param Process $process
+     * @param ?callable $signal
+     * @return bool
+     */
     public static function stop(Process $process, ?callable $signal = null): bool
     {
         if (!$process->isRunning() || ($pid = $process->getPid()) === null) {
@@ -98,7 +118,7 @@ final class ProcessSupervisor
         if (posix_getpgid($pid) !== $pid || posix_getsid($pid) !== $pid) {
             return false;
         }
-        $signal ??= static fn (int $target, int $number): bool => posix_kill($target, $number);
+        $signal ??= posix_kill(...);
         // Do not poll/reap the leader between signals: even a zombie reserves its pid.
         $signal(-$pid, SIGTERM);
         usleep(200000);

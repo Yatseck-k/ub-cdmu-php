@@ -4,10 +4,12 @@ declare(strict_types=1);
 
 namespace UbModePhp;
 
+use PhpParser\ParserFactory;
+use Symfony\Component\Yaml\Yaml;
 use Throwable;
 use UbModePhp\Analyzer\Analyzer;
+use UbModePhp\Mutation\InfectionRunner;
 
-/** Environment checks; `doctor --tools` additionally probes the optional M/U runtime without running tests. */
 final class DoctorCommand
 {
     public static function run(Options $options): int
@@ -20,7 +22,7 @@ final class DoctorCommand
         try {
             $config = Config::load($options->root, $options->configPath);
             try {
-                $version = Mutation\InfectionRunner::version($options->root, $config);
+                $version = InfectionRunner::version($options->root, $config);
                 $mutation = ['available' => true, 'version' => $version, 'reason' => null];
             } catch (Throwable $error) {
                 $mutation = ['available' => false, 'version' => null, 'reason' => $error->getMessage()];
@@ -47,8 +49,8 @@ final class DoctorCommand
             'php_version_id' => PHP_VERSION_ID,
             'php_supported' => version_compare(PHP_VERSION, '8.2.0', '>='),
             'analyzer' => class_exists(Analyzer::class),
-            'composer_dependencies' => class_exists(\PhpParser\ParserFactory::class)
-                && class_exists(\Symfony\Component\Yaml\Yaml::class),
+            'composer_dependencies' => class_exists(ParserFactory::class)
+                && class_exists(Yaml::class),
             'project' => is_dir($options->root),
         ];
         if ($options->format === 'json') {

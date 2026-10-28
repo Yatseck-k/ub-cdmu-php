@@ -4,7 +4,10 @@ declare(strict_types=1);
 
 namespace UbModePhp;
 
+use FilesystemIterator;
 use RuntimeException;
+use SplFileInfo;
+use Throwable;
 
 final class ReportRetention
 {
@@ -29,7 +32,7 @@ final class ReportRetention
             }
             Reports::atomic($directory . '/run.json', Reports::json(['owner' => 'ub-cdmu-php', 'id' => $id, 'status' => 'active']));
             return ['directory' => $directory, 'lock' => $lock];
-        } catch (\Throwable $error) {
+        } catch (Throwable $error) {
             foreach (['run.json', 'run.lock'] as $name) {
                 if (is_file($directory . '/' . $name) && !@unlink($directory . '/' . $name)) {
                     self::warning(new RuntimeException('cannot roll back mutation run file: ' . $directory . '/' . $name));
@@ -55,7 +58,7 @@ final class ReportRetention
                     'owner' => 'ub-cdmu-php', 'id' => basename($run['directory']), 'status' => 'failed',
                 ]));
             }
-        } catch (\Throwable $error) {
+        } catch (Throwable $error) {
             self::warning($error);
         } finally {
             flock($run['lock'], LOCK_UN);
@@ -63,7 +66,7 @@ final class ReportRetention
         }
         try {
             self::failedRuns($root, $config);
-        } catch (\Throwable $error) {
+        } catch (Throwable $error) {
             self::warning($error);
         }
     }
@@ -77,13 +80,17 @@ final class ReportRetention
         $base = Reports::directory($root, $config['reports']['directory'] . '/.mutation-runs');
         $runs = [];
         foreach (glob($base . '/*', GLOB_ONLYDIR) ?: [] as $directory) {
-            if (is_link($directory) || !preg_match('/^[a-f0-9]{24}$/D', basename($directory))
-                || is_link($directory . '/run.json') || is_link($directory . '/run.lock')) {
+            if (
+                is_link($directory) || !preg_match('/^[a-f0-9]{24}$/D', basename($directory))
+                || is_link($directory . '/run.json') || is_link($directory . '/run.lock')
+            ) {
                 continue;
             }
             $meta = json_decode(@file_get_contents($directory . '/run.json') ?: 'null', true);
-            if (($meta['owner'] ?? null) !== 'ub-cdmu-php' || ($meta['id'] ?? null) !== basename($directory)
-                || !is_file($directory . '/run.lock')) {
+            if (
+                ($meta['owner'] ?? null) !== 'ub-cdmu-php' || ($meta['id'] ?? null) !== basename($directory)
+                || !is_file($directory . '/run.lock')
+            ) {
                 continue;
             }
             if (($meta['status'] ?? null) === 'active' && filemtime($directory . '/run.lock') < time() - 60) {
@@ -119,7 +126,13 @@ final class ReportRetention
         }
     }
 
-    /** Caller holds the exclusive tool lock; readers hold its shared counterpart. */
+    /**
+     * The caller holds the exclusive tool lock; readers hold the shared one.
+     *
+     * @param string $store
+     * @param string $tool
+     * @param int $keep
+     */
     public static function generations(string $store, string $tool, int $keep): void
     {
         if ($keep === 0) {
@@ -130,8 +143,10 @@ final class ReportRetention
         $generations = [];
         $allowed = $tool === 'uml' ? ['uml.json', 'uml.svg', 'uml.html'] : ['mutate.json', 'mutate.raw.json', 'mutate.log'];
         foreach (glob($base . '/*', GLOB_ONLYDIR) ?: [] as $directory) {
-            if (is_link($directory) || !preg_match('/^[a-f0-9]{24}$/D', basename($directory))
-                || is_link($directory . '/manifest.json')) {
+            if (
+                is_link($directory) || !preg_match('/^[a-f0-9]{24}$/D', basename($directory))
+                || is_link($directory . '/manifest.json')
+            ) {
                 continue;
             }
             $manifest = json_decode(@file_get_contents($directory . '/manifest.json') ?: 'null', true);
@@ -147,8 +162,10 @@ final class ReportRetention
             }
             $valid = true;
             foreach ($manifest as $name => $hash) {
-                if (!is_string($hash) || !preg_match('/^[a-f0-9]{64}$/D', $hash)
-                    || is_link($directory . '/' . $name) || !is_file($directory . '/' . $name)) {
+                if (
+                    !is_string($hash) || !preg_match('/^[a-f0-9]{64}$/D', $hash)
+                    || is_link($directory . '/' . $name) || !is_file($directory . '/' . $name)
+                ) {
                     $valid = false;
                     break;
                 }
@@ -168,7 +185,8 @@ final class ReportRetention
         if (is_link($directory)) {
             throw new RuntimeException('refusing to traverse retention symlink');
         }
-        foreach (new \FilesystemIterator($directory) as $file) {
+        /** @var SplFileInfo $file */
+        foreach (new FilesystemIterator($directory) as $file) {
             if ($file->isDir() && !$file->isLink()) {
                 self::remove($file->getPathname());
             } elseif (!@unlink($file->getPathname())) {
@@ -180,7 +198,7 @@ final class ReportRetention
         }
     }
 
-    public static function warning(\Throwable $error): void
+    public static function warning(Throwable $error): void
     {
         fwrite(STDERR, 'ub-php: report history cleanup warning: ' . $error->getMessage() . "\n");
     }

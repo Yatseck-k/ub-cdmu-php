@@ -6,7 +6,6 @@ namespace UbModePhp;
 
 use InvalidArgumentException;
 
-/** Validated command-line options; the only place that interprets raw arguments. */
 final readonly class Options
 {
     private const COMMANDS = ['doctor', 'check', 'crap', 'dry', 'mutate', 'uml'];
@@ -26,7 +25,10 @@ final readonly class Options
     ) {
     }
 
-    /** @param list<string> $arguments */
+    /**
+     * @param list<string> $arguments
+     * @return self
+     */
     public static function parse(array $arguments): self
     {
         $values = ['root' => getcwd() ?: '.', 'configPath' => null, 'command' => null];
@@ -55,10 +57,14 @@ final readonly class Options
     }
 
     /**
-     * Reads one option that belongs to an already selected command and returns the index of its last token.
+     * Returns the index of the option's last token.
      *
      * @param array<string, mixed> $values
+     * @param string $command
+     * @param string $argument
      * @param list<string> $arguments
+     * @param int $index
+     * @return int
      */
     private static function commandOption(array &$values, string $command, string $argument, array $arguments, int $index): int
     {

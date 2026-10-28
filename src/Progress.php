@@ -6,15 +6,15 @@ namespace UbModePhp;
 
 final class Progress
 {
-    private bool $terminal;
-    private TerminalStyle $style;
+    private readonly bool $terminal;
+    private readonly TerminalStyle $style;
     private string $stage = '';
     private int $width = 0;
     private int $bucket = -1;
     private float $lastUpdate = 0;
     private bool $lineOpen = false;
 
-    public function __construct(private bool $enabled, private int $stages = 4)
+    public function __construct(private readonly bool $enabled, private readonly int $stages = 4)
     {
         $this->terminal = function_exists('stream_isatty') && stream_isatty(STDERR);
         $this->style = new TerminalStyle(STDERR);
@@ -22,8 +22,7 @@ final class Progress
 
     public function stage(int $number, string $label, int $total = 1): void
     {
-        $this->closeLine();
-        $this->stage = $number . '/' . $this->stages . ' ' . $label;
+        $this->begin($number, $label);
         $this->bucket = -1;
         $this->lastUpdate = 0;
         $this->width = 0;
@@ -62,35 +61,40 @@ final class Progress
 
     public function skip(int $number, string $label, string $reason): void
     {
-        $this->closeLine();
-        $this->stage = $number . '/' . $this->stages . ' ' . $label;
-        if ($this->enabled) {
-            fwrite(STDERR, $this->style->paint($this->stage . ': skipped (' . $reason . ')', '2') . "\n");
-        }
+        $this->begin($number, $label);
+        $this->say($this->stage . ': skipped (' . $reason . ')', '2');
     }
 
     public function activity(int $number, string $label): void
     {
-        $this->closeLine();
-        $this->stage = $number . '/' . $this->stages . ' ' . $label;
-        if ($this->enabled) {
-            fwrite(STDERR, $this->style->paint($this->stage, '36') . "\n");
-        }
+        $this->begin($number, $label);
+        $this->say($this->stage, '36');
     }
 
     public function complete(): void
     {
         $this->closeLine();
-        if ($this->enabled) {
-            fwrite(STDERR, $this->style->paint("Completed: analysis and configured reports finished.", '32') . "\n");
-        }
+        $this->say('Completed: analysis and configured reports finished.', '32');
     }
 
     public function fail(): void
     {
         $this->closeLine();
-        if ($this->enabled && $this->stage !== '') {
-            fwrite(STDERR, $this->style->paint('Stopped during ' . $this->stage . '.', '31') . "\n");
+        if ($this->stage !== '') {
+            $this->say('Stopped during ' . $this->stage . '.', '31');
+        }
+    }
+
+    private function begin(int $number, string $label): void
+    {
+        $this->closeLine();
+        $this->stage = $number . '/' . $this->stages . ' ' . $label;
+    }
+
+    private function say(string $message, string $color): void
+    {
+        if ($this->enabled) {
+            fwrite(STDERR, $this->style->paint($message, $color) . "\n");
         }
     }
 

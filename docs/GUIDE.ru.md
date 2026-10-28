@@ -13,9 +13,9 @@ CDMU (`ub-php`) проверяет качество PHP-кода, не запу�
 
 ## Что нужно
 
-- PHP 8.2+ и Composer 2 (расширения `dom`, `json`, `mbstring`).
+- PHP 8.2+ и Composer 2 (расширения `dom`, `json`, `mbstring`, `pcntl`, `posix`; Linux/macOS).
 - Git — только для флага `--changed`.
-- Для мутаций дополнительно: Infection 0.29.14, PHPUnit, драйвер покрытия (Xdebug или PCOV), расширения `posix` и `pcntl` (Linux/macOS).
+- Для мутаций дополнительно: Infection 0.29.14, PHPUnit и драйвер покрытия (Xdebug или PCOV).
 
 ## Установка
 

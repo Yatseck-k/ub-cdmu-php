@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace UbModePhp;
 
+use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 final class Reports
 {
+    public const SCHEMA_VERSION = '1.0';
+
     public static function json(array $report): string
     {
         $options = JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
@@ -29,7 +33,7 @@ final class Reports
                 . ' :complexity ' . $entry['complexity'] . ' :coverage ' . self::number($entry['coverage'])
                 . ' :crap ' . self::number($entry['crap']) . '}';
         }
-        return '{:entries [' . implode(' ', $records) . "]}\n";
+        return self::collection('entries', $records);
     }
 
     public static function dryEdn(array $candidates): string
@@ -45,7 +49,21 @@ final class Reports
             $records[] = '{:score ' . self::number($candidate['score']) . ' :language "php" ' . implode(' ', $spans)
                 . ' :left-nodes ' . $candidate['left_nodes'] . ' :right-nodes ' . $candidate['right_nodes'] . '}';
         }
-        return '{:candidates [' . implode(' ', $records) . "]}\n";
+        return self::collection('candidates', $records);
+    }
+
+    private static function collection(string $key, array $records): string
+    {
+        return '{:' . $key . ' [' . implode(' ', $records) . "]}\n";
+    }
+
+    public static function read(string $path): string
+    {
+        $content = file_get_contents($path);
+        if ($content === false) {
+            throw new RuntimeException('cannot read file: ' . $path);
+        }
+        return $content;
     }
 
     public static function atomic(string $path, string $content): void
@@ -59,8 +77,11 @@ final class Reports
             throw new RuntimeException('cannot create temporary report');
         }
         try {
-            if (file_put_contents($temporary, $content) === false || !rename($temporary, $path)) {
-                throw new RuntimeException('cannot write report');
+            // A short write (full disk) must fail; PHP's own notice is replaced by one clear error.
+            error_clear_last();
+            if (@file_put_contents($temporary, $content) !== strlen($content) || !@rename($temporary, $path)) {
+                $reason = error_get_last()['message'] ?? '';
+                throw new RuntimeException('cannot write report' . (preg_match('/errno=\d+ (.+)$/', $reason, $match) ? ': ' . $match[1] : ''));
             }
         } finally {
             if (is_file($temporary)) {
@@ -69,7 +90,6 @@ final class Reports
         }
     }
 
-    /** Publish a generation through one atomic pointer; aliases always resolve together. */
     public static function bundle(string $root, string $directory, string $tool, array $artifacts, int $keep = 5): array
     {
         $base = self::directory($root, $directory);
@@ -114,18 +134,20 @@ final class Reports
             if (file_exists($store . '/' . $tool . '-current') && !is_link($store . '/' . $tool . '-current')) {
                 throw new RuntimeException('report pointer is not a symlink');
             }
-            if (!symlink($tool . '/' . basename($generation), $pointer)
-                || !rename($pointer, $store . '/' . $tool . '-current')) {
+            if (
+                !symlink($tool . '/' . basename($generation), $pointer)
+                || !rename($pointer, $store . '/' . $tool . '-current')
+            ) {
                 throw new RuntimeException('cannot publish report generation');
             }
             clearstatcache(true);
             try {
                 ReportRetention::generations($store, $tool, $keep);
-            } catch (\Throwable $error) {
+            } catch (Throwable $error) {
                 ReportRetention::warning($error);
             }
             return array_map(static fn (string $name): string => $directory . '/' . $name, array_keys($artifacts));
-        } catch (\Throwable $error) {
+        } catch (Throwable $error) {
             foreach ($created as $alias) {
                 unlink($alias);
             }
@@ -150,31 +172,31 @@ final class Reports
         $store = Config::projectPath($root, $directory . '/.cdmu');
         $lockPath = $store . '/' . $tool . '.lock';
         if (is_link($lockPath)) {
-            throw new \InvalidArgumentException('unmanaged snapshot lock');
+            throw new InvalidArgumentException('unmanaged snapshot lock');
         }
         $lock = @fopen($lockPath, 'r');
         if ($lock === false || !flock($lock, LOCK_SH)) {
-            throw new \InvalidArgumentException('cannot read snapshot lock');
+            throw new InvalidArgumentException('cannot read snapshot lock');
         }
         try {
             $alias = $root . '/' . $directory . '/' . $name;
             if (!is_link($alias) || readlink($alias) !== '.cdmu/' . $tool . '-current/' . $name) {
-                throw new \InvalidArgumentException('unverified snapshot alias');
+                throw new InvalidArgumentException('unverified snapshot alias');
             }
             clearstatcache(true);
             $real = Config::projectPath($root, $directory . '/' . $name);
             $manifestBytes = @file_get_contents(dirname($real) . '/manifest.json');
             $content = @file_get_contents($real);
             if ($manifestBytes === false || $content === false) {
-                throw new \InvalidArgumentException('snapshot is unreadable');
+                throw new InvalidArgumentException('snapshot is unreadable');
             }
             $manifest = json_decode($manifestBytes, true, 512, JSON_THROW_ON_ERROR);
             if (!is_array($manifest) || ($manifest[$name] ?? null) !== hash('sha256', $content)) {
-                throw new \InvalidArgumentException('snapshot checksum mismatch');
+                throw new InvalidArgumentException('snapshot checksum mismatch');
             }
             $data = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
             if (!is_array($data)) {
-                throw new \InvalidArgumentException('snapshot must be an object');
+                throw new InvalidArgumentException('snapshot must be an object');
             }
             return $data;
         } finally {
@@ -197,7 +219,7 @@ final class Reports
                 throw new RuntimeException('cannot create report directory');
             }
             $real = realpath($path);
-            if ($real === false || !is_dir($real) || !str_starts_with($real, $base . '/')) {
+            if ($real === false || !is_dir($real) || !Paths::isBelow($real, $base)) {
                 throw new RuntimeException('report directory outside project root');
             }
         }

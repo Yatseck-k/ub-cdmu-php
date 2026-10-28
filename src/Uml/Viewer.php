@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace UbModePhp\Uml;
 
+use UbModePhp\Reports;
+
 final class Viewer
 {
     public static function visible(array $nodes, string $namespace, int $limit): array
@@ -31,9 +33,16 @@ final class Viewer
             [$x, $y] = $positions[$edge['from']];
             [$tx, $ty] = $positions[$edge['to']];
             [$path, $labelX, $labelY] = self::connection($x, $y, $tx, $ty);
-            $lines[] = sprintf('<g class="edge" data-from="%s" data-to="%s"><path d="%s" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/><text x="%g" y="%g" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#475569">%s</text><title>%s</title></g>',
-                self::escape($edge['from']), self::escape($edge['to']), $path, $labelX, $labelY,
-                self::escape($edge['kind']), self::escape($edge['from'] . ' → ' . $edge['to'] . ' (' . $edge['kind'] . ')'));
+            $lines[] = sprintf(
+                '<g class="edge" data-from="%s" data-to="%s"><path d="%s" fill="none" stroke="#64748b" stroke-width="1.5" marker-end="url(#arrow)"/><text x="%g" y="%g" font-family="sans-serif" font-size="9" text-anchor="middle" fill="#475569">%s</text><title>%s</title></g>',
+                self::escape($edge['from']),
+                self::escape($edge['to']),
+                $path,
+                $labelX,
+                $labelY,
+                self::escape($edge['kind']),
+                self::escape($edge['from'] . ' → ' . $edge['to'] . ' (' . $edge['kind'] . ')')
+            );
         }
         foreach ($nodes as $node) {
             [$x, $y] = $positions[$node['id']];
@@ -50,7 +59,7 @@ final class Viewer
                     . $member['name'] . ($member['kind'] === 'method' ? '()' : '') . ($member['type'] !== '' ? ': ' . $member['type'] : '');
             }
             foreach ($labels as $index => $label) {
-                $characters = preg_split('//u', $label, -1, PREG_SPLIT_NO_EMPTY);
+                $characters = preg_split('//u', $label, -1, PREG_SPLIT_NO_EMPTY) ?: [$label];
                 $short = count($characters) > 43 ? implode('', array_slice($characters, 0, 40)) . '...' : $label;
                 $lines[] = sprintf('<text x="14" y="%d" font-family="sans-serif" font-size="%d" fill="#0f172a">%s</text>', 24 + $index * 23, $index === 1 ? 16 : 12, self::escape($short));
             }
@@ -63,7 +72,7 @@ final class Viewer
     public static function html(array $report): string
     {
         $json = json_encode($report, JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        return strtr(file_get_contents(dirname(__DIR__, 2) . '/assets/uml-viewer.html'), ['{{DATA}}' => $json, '{{SVG}}' => self::svg($report)]);
+        return strtr(Reports::read(dirname(__DIR__, 2) . '/assets/uml-viewer.html'), ['{{DATA}}' => $json, '{{SVG}}' => self::svg($report)]);
     }
 
     private static function connection(int $x, int $y, int $tx, int $ty): array

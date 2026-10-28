@@ -4,14 +4,15 @@ declare(strict_types=1);
 
 namespace UbModePhp\Mutation;
 
-/** Binds a mutant, known only by file and line, to the analysis unit that owns it. */
 final class MutantBinder
 {
     /**
-     * Returns the id of the unique innermost unit containing the line. Infection reports no column,
-     * so units with equal spans stay ambiguous and yield null.
+     * Units with equal spans stay ambiguous (Infection reports no column) and yield null.
      *
      * @param list<array<string, mixed>> $units
+     * @param string $file
+     * @param int $line
+     * @return ?string
      */
     public static function unitId(array $units, string $file, int $line): ?string
     {

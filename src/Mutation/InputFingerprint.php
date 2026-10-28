@@ -16,31 +16,33 @@ use RecursiveIteratorIterator;
 use RuntimeException;
 use SplFileInfo;
 use UbModePhp\Config;
+use UbModePhp\Paths;
 use UbModePhp\Reports;
 use UbModePhp\SourceFiles;
 
-/**
- * Hashes everything a mutation measurement depends on: selected source, tests and the
- * Composer/Infection/PHPUnit configuration, minus declared generated outputs.
- */
+/** Hashes everything a mutation measurement depends on, minus declared generated outputs. */
 final class InputFingerprint
 {
     private const SKIPPED_DIRECTORIES = ['vendor', 'node_modules', '.git', '.metrics', '.phpunit.cache'];
 
-    /** @var list<string> files that stay protected even if an exclusion overlaps them */
+    /** @var list<string> */
     private array $mandatory = [];
 
-    /** @var list<string> files or directories to hash */
+    /** @var list<string> */
     private array $roots = [];
 
-    /** @var list<string> generated outputs and explicit exclusions */
+    /** @var list<string> */
     private array $exclude = [];
 
     private function __construct(private readonly string $root, private readonly array $config)
     {
     }
 
-    /** @return array{source: array<string, string>, inputs: array<string, string>, configuration: string} */
+    /**
+     * @param string $root
+     * @param array<string, mixed> $config
+     * @return array{source: array<string, string>, inputs: array<string, string>, configuration: string}
+     */
     public static function compute(string $root, array $config): array
     {
         $root = realpath($root) ?: throw new RuntimeException('project root does not exist');
@@ -80,7 +82,9 @@ final class InputFingerprint
         }
     }
 
-    /** @return array<string, mixed> decoded Infection configuration, empty when absent */
+    /**
+     * @return array<string, mixed> decoded Infection configuration, empty when absent
+     */
     private function infectionSettings(): array
     {
         $file = $this->root . '/' . $this->config['mutator']['configuration'];
@@ -189,7 +193,10 @@ final class InputFingerprint
         return $inputs;
     }
 
-    /** @return iterable<string> regular files below a directory, skipping links and excluded paths */
+    /**
+     * @param string $directory
+     * @return iterable<string> regular files below a directory, skipping links and excluded paths
+     */
     private function walk(string $directory): iterable
     {
         $filter = new RecursiveCallbackFilterIterator(
@@ -205,7 +212,12 @@ final class InputFingerprint
         }
     }
 
-    /** Only mutation-relevant settings take part, so unrelated edits do not make measurements stale. */
+    /**
+     * Only mutation-relevant settings take part, so unrelated edits do not make measurements stale.
+     *
+     * @param array<string, mixed> $config
+     * @return string
+     */
     private static function configurationHash(array $config): string
     {
         $settings = [
@@ -227,14 +239,14 @@ final class InputFingerprint
         try {
             $this->exclude[] = Config::enginePath($this->root, $path, 'generated output', false);
         } catch (InvalidArgumentException) {
-            // External outputs are outside the input manifest already.
+            // External outputs are not part of the manifest anyway.
         }
     }
 
     private function excluded(string $path): bool
     {
         foreach ($this->exclude as $prefix) {
-            if ($path === $prefix || str_starts_with($path, $prefix . '/')) {
+            if (Paths::isAtOrBelow($path, $prefix)) {
                 return true;
             }
         }

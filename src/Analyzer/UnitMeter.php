@@ -5,11 +5,38 @@ declare(strict_types=1);
 namespace UbModePhp\Analyzer;
 
 use PhpParser\Node;
+use PhpParser\Node\Expr;
+use PhpParser\Node\Expr\BinaryOp;
+use PhpParser\Node\Expr\BinaryOp\BooleanAnd;
+use PhpParser\Node\Expr\BinaryOp\BooleanOr;
+use PhpParser\Node\Expr\BinaryOp\Coalesce;
+use PhpParser\Node\Expr\BinaryOp\LogicalAnd;
+use PhpParser\Node\Expr\BinaryOp\LogicalOr;
+use PhpParser\Node\Expr\FuncCall;
+use PhpParser\Node\Expr\MethodCall;
+use PhpParser\Node\Expr\NullsafeMethodCall;
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\Expr\Ternary;
+use PhpParser\Node\FunctionLike;
+use PhpParser\Node\Identifier;
+use PhpParser\Node\MatchArm;
+use PhpParser\Node\Name;
+use PhpParser\Node\Stmt\Case_;
+use PhpParser\Node\Stmt\Catch_;
+use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\Do_;
+use PhpParser\Node\Stmt\ElseIf_;
+use PhpParser\Node\Stmt\For_;
+use PhpParser\Node\Stmt\Foreach_;
+use PhpParser\Node\Stmt\If_;
+use PhpParser\Node\Stmt\While_;
 
-/** Cyclomatic complexity, node count and normalized structural features of one function body. */
 final class UnitMeter
 {
-    /** @return array{int, int, list<string>} complexity, node count, sorted features */
+    /**
+     * @param array|Node $body
+     * @return array{int, int, list<string>} complexity, node count, sorted features
+     */
     public static function measure(array|Node $body): array
     {
         $complexity = 1;
@@ -32,14 +59,14 @@ final class UnitMeter
                 }
                 return;
             }
-            if ($value instanceof Node\FunctionLike || $value instanceof Node\Stmt\ClassLike) {
+            if ($value instanceof FunctionLike || $value instanceof ClassLike) {
                 return; // Nested units receive their own metrics.
             }
             $type = substr(strrchr($value::class, '\\') ?: $value::class, 1);
             $count++;
             $features[] = 'node:' . $type;
             $features[] = 'edge:' . $parent . '/' . $type;
-            array_push($features, ...self::calls($value), ...($value instanceof Node\Expr\BinaryOp ? ['op:' . $type] : []));
+            array_push($features, ...self::calls($value), ...($value instanceof BinaryOp ? ['op:' . $type] : []));
             if (self::isDecision($value)) {
                 $complexity++;
             }
@@ -56,15 +83,18 @@ final class UnitMeter
         return [$complexity, $count, $features];
     }
 
-    /** @return list<string> a `call:` feature for direct function, method and static calls */
+    /**
+     * @param Node $node
+     * @return list<string> a `call:` feature for direct function, method and static calls
+     */
     private static function calls(Node $node): array
     {
-        if ($node instanceof Node\Expr\FuncCall && $node->name instanceof Node\Name) {
+        if ($node instanceof FuncCall && $node->name instanceof Name) {
             return ['call:' . strtolower($node->name->toString())];
         }
         if (
-            ($node instanceof Node\Expr\MethodCall || $node instanceof Node\Expr\NullsafeMethodCall || $node instanceof Node\Expr\StaticCall)
-            && $node->name instanceof Node\Identifier
+            ($node instanceof MethodCall || $node instanceof NullsafeMethodCall || $node instanceof StaticCall)
+            && $node->name instanceof Identifier
         ) {
             return ['call:' . strtolower($node->name->toString())];
         }
@@ -73,20 +103,20 @@ final class UnitMeter
 
     private static function isDecision(Node $node): bool
     {
-        return $node instanceof Node\Stmt\If_
-            || $node instanceof Node\Stmt\ElseIf_
-            || $node instanceof Node\Stmt\For_
-            || $node instanceof Node\Stmt\Foreach_
-            || $node instanceof Node\Stmt\While_
-            || $node instanceof Node\Stmt\Do_
-            || $node instanceof Node\Stmt\Catch_
-            || ($node instanceof Node\Stmt\Case_ && $node->cond instanceof Node\Expr)
-            || ($node instanceof Node\MatchArm && $node->conds !== null)
-            || $node instanceof Node\Expr\Ternary
-            || $node instanceof Node\Expr\BinaryOp\BooleanAnd
-            || $node instanceof Node\Expr\BinaryOp\BooleanOr
-            || $node instanceof Node\Expr\BinaryOp\LogicalAnd
-            || $node instanceof Node\Expr\BinaryOp\LogicalOr
-            || $node instanceof Node\Expr\BinaryOp\Coalesce;
+        return $node instanceof If_
+            || $node instanceof ElseIf_
+            || $node instanceof For_
+            || $node instanceof Foreach_
+            || $node instanceof While_
+            || $node instanceof Do_
+            || $node instanceof Catch_
+            || ($node instanceof Case_ && $node->cond instanceof Expr)
+            || ($node instanceof MatchArm && $node->conds !== null)
+            || $node instanceof Ternary
+            || $node instanceof BooleanAnd
+            || $node instanceof BooleanOr
+            || $node instanceof LogicalAnd
+            || $node instanceof LogicalOr
+            || $node instanceof Coalesce;
     }
 }

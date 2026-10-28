@@ -8,7 +8,6 @@ use InvalidArgumentException;
 use RuntimeException;
 use UbModePhp\Analyzer\Analyzer;
 
-/** The static C+D pipeline behind `check`, `crap` and `dry`. */
 final class CheckCommand
 {
     public static function run(string $root, array $config, Options $options, Progress $progress): int
@@ -70,7 +69,9 @@ final class CheckCommand
     }
 
     /**
+     * @param string $root
      * @param list<string> $files
+     * @param Progress $progress
      * @return list<array<string, mixed>> analysis units
      */
     private static function parse(string $root, array $files, Progress $progress): array
@@ -138,6 +139,10 @@ final class CheckCommand
     }
 
     /**
+     * @param string $directory
+     * @param array<string, mixed> $config
+     * @param string $command
+     * @param string $json
      * @param ?array<int, array<string, mixed>> $entries null when CRAP did not run
      * @param ?array<int, array<string, mixed>> $candidates null when DRY did not run
      * @return array<string, string> report path => content
@@ -159,7 +164,11 @@ final class CheckCommand
         return $reports;
     }
 
-    /** @return list<string> */
+    /**
+     * @param array $reports
+     * @param Progress $progress
+     * @return list<string>
+     */
     private static function save(array $reports, Progress $progress): array
     {
         if ($reports === []) {

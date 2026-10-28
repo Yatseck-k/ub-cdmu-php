@@ -5,8 +5,14 @@ declare(strict_types=1);
 namespace UbModePhp\Analyzer;
 
 use PhpParser\Node;
+use PhpParser\Node\Expr\ArrowFunction;
+use PhpParser\Node\Expr\Closure;
+use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\Stmt\ClassMethod;
+use PhpParser\Node\Stmt\Function_;
+use PhpParser\Node\Stmt\Namespace_;
 
-/** Walks a parsed file and reports every function, method, closure and arrow function as a unit. */
+/** Anonymous names are numbered per instance, so use one instance per analysis run. */
 final class UnitDiscoverer
 {
     private int $anonymousSequence = 0;
@@ -15,9 +21,8 @@ final class UnitDiscoverer
     private array $units = [];
 
     /**
-     * Anonymous names are numbered per instance, so use one instance per analysis run.
-     *
      * @param array<mixed> $nodes
+     * @param string $file
      */
     public function discover(array $nodes, string $file): void
     {
@@ -30,7 +35,12 @@ final class UnitDiscoverer
         return $this->units;
     }
 
-    /** @param array<mixed>|Node $nodes */
+    /**
+     * @param array<mixed>|Node $nodes
+     * @param string $file
+     * @param string $namespace
+     * @param ?string $className
+     */
     private function walk(array|Node $nodes, string $file, string $namespace, ?string $className): void
     {
         if (is_array($nodes)) {
@@ -41,11 +51,11 @@ final class UnitDiscoverer
             }
             return;
         }
-        if ($nodes instanceof Node\Stmt\Namespace_) {
+        if ($nodes instanceof Namespace_) {
             $this->walk($nodes->stmts, $file, $nodes->name?->toString() ?? '', null);
             return;
         }
-        if ($nodes instanceof Node\Stmt\ClassLike) {
+        if ($nodes instanceof ClassLike) {
             $name = $nodes->name?->toString()
                 ?? 'anonymous@' . $nodes->getStartLine() . '#' . ++$this->anonymousSequence;
             $this->walk($nodes->stmts, $file, $namespace, $name);
@@ -65,19 +75,19 @@ final class UnitDiscoverer
         $kind = null;
         $name = null;
         $body = null;
-        if ($node instanceof Node\Stmt\Function_) {
+        if ($node instanceof Function_) {
             $kind = 'function';
             $name = $node->name->toString();
             $body = $node->stmts;
-        } elseif ($node instanceof Node\Stmt\ClassMethod && $node->stmts !== null) {
+        } elseif ($node instanceof ClassMethod && $node->stmts !== null) {
             $kind = 'method';
             $name = $node->name->toString();
             $body = $node->stmts;
-        } elseif ($node instanceof Node\Expr\Closure) {
+        } elseif ($node instanceof Closure) {
             $kind = 'closure';
             $name = 'closure@' . $node->getStartLine() . '#' . ++$this->anonymousSequence;
             $body = $node->stmts;
-        } elseif ($node instanceof Node\Expr\ArrowFunction) {
+        } elseif ($node instanceof ArrowFunction) {
             $kind = 'arrow';
             $name = 'arrow@' . $node->getStartLine() . '#' . ++$this->anonymousSequence;
             $body = $node->expr;

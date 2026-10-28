@@ -5,11 +5,17 @@ declare(strict_types=1);
 namespace UbModePhp\Uml;
 
 use PhpParser\Node;
+use PhpParser\Node\Expr\New_;
+use PhpParser\Node\Expr\StaticCall;
+use PhpParser\Node\IntersectionType;
+use PhpParser\Node\Name;
+use PhpParser\Node\NullableType;
+use PhpParser\Node\Stmt\ClassLike;
+use PhpParser\Node\UnionType;
 
-/** Collects de-duplicated relations (extends, implements, trait-use, type, new, static-call) between types. */
 final class EdgeCollector
 {
-    /** @var array<string, array{from: string, to: string, kind: string}> keyed by kind:from:to */
+    /** @var array<string, array{from: string, to: string, kind: string}> */
     private array $edges = [];
 
     public function add(string $from, string $to, string $kind): void
@@ -27,30 +33,29 @@ final class EdgeCollector
 
     public function type(string $id, ?string $parent, ?Node $type): void
     {
-        if ($type instanceof Node\Name) {
+        if ($type instanceof Name) {
             $name = $this->resolve($type, $id, $parent);
             if ($name !== null) {
                 $this->add($id, $name, 'type');
             }
-        } elseif ($type instanceof Node\NullableType) {
+        } elseif ($type instanceof NullableType) {
             $this->type($id, $parent, $type->type);
-        } elseif ($type instanceof Node\UnionType || $type instanceof Node\IntersectionType) {
+        } elseif ($type instanceof UnionType || $type instanceof IntersectionType) {
             foreach ($type->types as $part) {
                 $this->type($id, $parent, $part);
             }
         }
     }
 
-    /** Records `new` and static-call targets found anywhere below a class statement. */
     public function dependencies(Node $node, string $id, ?string $parent): void
     {
-        if ($node instanceof Node\Stmt\ClassLike) {
+        if ($node instanceof ClassLike) {
             return;
         }
-        if (($node instanceof Node\Expr\New_ || $node instanceof Node\Expr\StaticCall) && $node->class instanceof Node\Name) {
+        if (($node instanceof New_ || $node instanceof StaticCall) && $node->class instanceof Name) {
             $target = $this->resolve($node->class, $id, $parent);
             if ($target !== null) {
-                $this->add($id, $target, $node instanceof Node\Expr\New_ ? 'new' : 'static-call');
+                $this->add($id, $target, $node instanceof New_ ? 'new' : 'static-call');
             }
         }
         foreach ($node->getSubNodeNames() as $field) {
@@ -63,7 +68,7 @@ final class EdgeCollector
         }
     }
 
-    private function resolve(Node\Name $name, string $id, ?string $parent): ?string
+    private function resolve(Name $name, string $id, ?string $parent): ?string
     {
         return match (strtolower($name->toString())) {
             'self', 'static' => $id,

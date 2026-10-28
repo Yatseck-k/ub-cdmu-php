@@ -4,15 +4,20 @@ declare(strict_types=1);
 
 namespace UbModePhp\Uml;
 
+use PhpParser\Modifiers;
 use PhpParser\Node;
+use PhpParser\Node\Identifier;
+use PhpParser\Node\IntersectionType;
+use PhpParser\Node\Name;
+use PhpParser\Node\NullableType;
+use PhpParser\Node\UnionType;
 
-/** Renders declared types and modifier flags the way the UML views show them. */
 final class TypeFormatter
 {
     public static function visibility(int $flags): string
     {
-        return $flags & Node\Stmt\Class_::MODIFIER_PRIVATE ? 'private'
-            : ($flags & Node\Stmt\Class_::MODIFIER_PROTECTED ? 'protected' : 'public');
+        return $flags & Modifiers::PRIVATE ? 'private'
+            : ($flags & Modifiers::PROTECTED ? 'protected' : 'public');
     }
 
     public static function type(?Node $type): string
@@ -20,16 +25,16 @@ final class TypeFormatter
         if (!$type instanceof Node) {
             return '';
         }
-        if ($type instanceof Node\NullableType) {
+        if ($type instanceof NullableType) {
             return '?' . self::type($type->type);
         }
-        if ($type instanceof Node\UnionType || $type instanceof Node\IntersectionType) {
+        if ($type instanceof UnionType || $type instanceof IntersectionType) {
             $parts = array_map(static function (Node $part) use ($type): string {
                 $value = self::type($part);
-                return $type instanceof Node\UnionType && $part instanceof Node\IntersectionType ? '(' . $value . ')' : $value;
+                return $type instanceof UnionType && $part instanceof IntersectionType ? '(' . $value . ')' : $value;
             }, $type->types);
-            return implode($type instanceof Node\UnionType ? '|' : '&', $parts);
+            return implode($type instanceof UnionType ? '|' : '&', $parts);
         }
-        return $type instanceof Node\Name || $type instanceof Node\Identifier ? $type->toString() : '';
+        return $type instanceof Name || $type instanceof Identifier ? $type->toString() : '';
     }
 }

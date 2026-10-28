@@ -90,13 +90,21 @@ final class Config
         self::relativePath($relative);
         $base = realpath($root);
         $path = realpath($root . '/' . $relative);
-        if ($base === false || $path === false || !str_starts_with($path, $base . DIRECTORY_SEPARATOR)) {
+        if ($base === false || $path === false || !Paths::isBelow($path, $base)) {
             throw new InvalidArgumentException('path is missing or outside project root: ' . $relative);
         }
         return $path;
     }
 
-    /** Normalize Infection/PHPUnit paths, including ./src and src/, inside the project. */
+    /**
+     * Resolves Infection/PHPUnit paths such as `./src` and `src/` inside the project.
+     *
+     * @param string $root
+     * @param mixed $value
+     * @param string $field
+     * @param bool $mustExist
+     * @return string
+     */
     public static function enginePath(string $root, mixed $value, string $field, bool $mustExist = true): string
     {
         if (!is_string($value) || $value === '' || str_contains($value, "\0") || str_contains($value, '\\')) {
@@ -127,8 +135,10 @@ final class Config
         }
         $resolved = realpath($ancestor);
         $path = $resolved === false ? '' : $resolved . ($tail === [] ? '' : '/' . implode('/', $tail));
-        if ($path === '' || ($path !== $base && !str_starts_with($path, $base . '/'))
-            || ($mustExist && !file_exists($path))) {
+        if (
+            $path === '' || !Paths::isAtOrBelow($path, $base)
+            || ($mustExist && !file_exists($path))
+        ) {
             throw new InvalidArgumentException($field . ' is missing or outside project root: ' . $value);
         }
         return $path;
@@ -198,8 +208,10 @@ final class Config
             }
         }
         $minimum = $config['mutator']['min_msi'];
-        if ($minimum !== null && ((!is_int($minimum) && !is_float($minimum))
-            || !is_finite((float) $minimum) || $minimum < 0 || $minimum > 100)) {
+        if (
+            $minimum !== null && ((!is_int($minimum) && !is_float($minimum))
+            || !is_finite((float) $minimum) || $minimum < 0 || $minimum > 100)
+        ) {
             throw new InvalidArgumentException('mutator.min_msi must be null or 0..100');
         }
         if (!is_int($config['uml']['view_limit']) || $config['uml']['view_limit'] < 1) {

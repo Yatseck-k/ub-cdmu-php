@@ -7,10 +7,11 @@ namespace UbModePhp\Mutation;
 use ColinODell\Json5\Json5Decoder;
 use RuntimeException;
 use Symfony\Component\Process\Process;
+use Throwable;
 use UbModePhp\Config;
 use UbModePhp\Progress;
-use UbModePhp\Reports;
 use UbModePhp\ReportRetention;
+use UbModePhp\Reports;
 
 final class InfectionRunner
 {
@@ -43,9 +44,11 @@ final class InfectionRunner
         if (dirname($configFile) !== realpath($root)) {
             throw new RuntimeException('Infection configuration must resolve directly inside the project root');
         }
-        $settings = Json5Decoder::decode(file_get_contents($configFile), true);
-        if (!is_array($settings) || !is_array($settings['source']['directories'] ?? null)
-            || !array_is_list($settings['source']['directories'])) {
+        $settings = Json5Decoder::decode(Reports::read($configFile), true);
+        if (
+            !is_array($settings) || !is_array($settings['source']['directories'] ?? null)
+            || !array_is_list($settings['source']['directories'])
+        ) {
             throw new RuntimeException('Infection source.directories must be a list of directories');
         }
         foreach ($settings['source']['directories'] as $directory) {
@@ -99,7 +102,7 @@ final class InfectionRunner
             Reports::atomic($temporary, Reports::json($settings));
             foreach ([SIGINT, SIGTERM] as $signal) {
                 $handlers[$signal] = pcntl_signal_get_handler($signal);
-                pcntl_signal($signal, static function (): void {
+                pcntl_signal($signal, static function (): never {
                     throw new RuntimeException('mutation run interrupted');
                 });
             }
@@ -116,7 +119,7 @@ final class InfectionRunner
             $result = null;
             while ($process->isRunning()) {
                 if (is_file($resultPath)) {
-                    $result = json_decode(file_get_contents($resultPath), true, 512, JSON_THROW_ON_ERROR);
+                    $result = json_decode(Reports::read($resultPath), true, 512, JSON_THROW_ON_ERROR);
                     break;
                 }
                 if (microtime(true) - $started > $config['mutator']['process_timeout']) {
@@ -130,7 +133,7 @@ final class InfectionRunner
                 }
                 usleep(20000);
             }
-        } catch (\Throwable $failure) {
+        } catch (Throwable $failure) {
             $error = $failure;
         } finally {
             pcntl_async_signals(false);
@@ -141,7 +144,7 @@ final class InfectionRunner
                     $process->getOutput();
                     $process->getErrorOutput();
                 }
-            } catch (\Throwable $failure) {
+            } catch (Throwable $failure) {
                 $error ??= $failure;
             }
             foreach ($handlers as $signal => $handler) {
@@ -157,13 +160,13 @@ final class InfectionRunner
             if (is_dir($directory . '/tmp') && !is_link($directory . '/tmp')) {
                 try {
                     ReportRetention::remove($directory . '/tmp');
-                } catch (\Throwable $failure) {
+                } catch (Throwable $failure) {
                     $error ??= $failure;
                 }
             }
         }
         try {
-            if ($error !== null) {
+            if ($error instanceof Throwable) {
                 throw new RuntimeException($error->getMessage() . "\n" . $tail, 0, $error);
             }
             if (!$stopped) {
@@ -180,7 +183,7 @@ final class InfectionRunner
             }
             return ['version' => $version, 'raw' => file_get_contents($directory . '/raw.json'),
                 'log' => file_get_contents($directory . '/engine.log'), 'run' => $run];
-        } catch (\Throwable $failure) {
+        } catch (Throwable $failure) {
             ReportRetention::finishRun($root, $config, $run, false);
             throw $failure;
         }

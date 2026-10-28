@@ -2,15 +2,18 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+use UbModePhp\Analyzer\Analyzer;
+
+require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/support.php';
 
 use Symfony\Component\Process\Process;
 use UbModePhp\Config;
 use UbModePhp\Mutation\InfectionReport;
-use UbModePhp\Reports;
-use UbModePhp\ReportRetention;
+use UbModePhp\Mutation\InputFingerprint;
 use UbModePhp\Mutation\ProcessSupervisor;
+use UbModePhp\ReportRetention;
+use UbModePhp\Reports;
 
 $repository = dirname(__DIR__);
 $root = sys_get_temp_dir() . '/cdmu-mutation-' . bin2hex(random_bytes(6));
@@ -90,10 +93,18 @@ try {
         && $normalized['summary']['killed'] === 1 && $normalized['summary']['survived'] === 1, 'statuses must remain distinct');
     foreach (['counter', 'outside', 'line', 'metric'] as $failure) {
         $bad = $raw;
-        if ($failure === 'counter') { $bad['stats']['totalMutantsCount']++; }
-        if ($failure === 'outside') { $bad['escaped'][0]['mutator']['originalFilePath'] = '/etc/passwd'; }
-        if ($failure === 'line') { $bad['escaped'][0]['mutator']['originalStartLine'] = 999; }
-        if ($failure === 'metric') { $bad['stats']['msi'] = 'not a metric'; }
+        if ($failure === 'counter') {
+            $bad['stats']['totalMutantsCount']++;
+        }
+        if ($failure === 'outside') {
+            $bad['escaped'][0]['mutator']['originalFilePath'] = '/etc/passwd';
+        }
+        if ($failure === 'line') {
+            $bad['escaped'][0]['mutator']['originalStartLine'] = 999;
+        }
+        if ($failure === 'metric') {
+            $bad['stats']['msi'] = 'not a metric';
+        }
         try {
             InfectionReport::normalize(Reports::json($bad), $root, [], ['src/Example.php']);
             throw new RuntimeException('invalid report accepted: ' . $failure);
@@ -145,9 +156,11 @@ try {
     [$code, $json, $error] = command([...$cli, 'mutate', '--format', 'json'], $root);
     $largeLog = file_get_contents($root . '/.metrics/mutate.log');
     $payload = str_replace(['!STDOUT-END!', '!STDERR-END!'], '', $largeLog);
-    ensure($code === 0 && str_contains($largeLog, '!STDOUT-END!') && str_contains($largeLog, '!STDERR-END!')
+    ensure(
+        $code === 0 && str_contains($largeLog, '!STDOUT-END!') && str_contains($largeLog, '!STDERR-END!')
         && strlen($payload) === 2097152 && substr_count($payload, 'O') === 1048576 && substr_count($payload, 'E') === 1048576,
-        'large output must drain both streams completely without polluting JSON: ' . $error);
+        'large output must drain both streams completely without polluting JSON: ' . $error
+    );
     infectionSettings($root, 'concurrent', $raw);
     $beforeRuns = glob($root . '/.metrics/.mutation-runs/*');
     $first = new Process([...$cli, 'mutate', '--format', 'json'], $root);
@@ -174,7 +187,9 @@ try {
             $stat = @file_get_contents('/proc/' . $child . '/stat');
             ensure(!posix_kill($child, 0) || ($stat !== false && str_contains($stat, ') Z ')), 'failed/timeout engine must not leave children running');
         }
-        if ($mode !== 'change') { ensure($source === file_get_contents($root . '/src/Example.php'), 'runner modified source'); }
+        if ($mode !== 'change') {
+            ensure($source === file_get_contents($root . '/src/Example.php'), 'runner modified source');
+        }
         file_put_contents($root . '/src/Example.php', $source);
     }
     file_put_contents($root . '/.ub-mode.yaml', "mutator:\n  executable: bin/infection\n  process_timeout: 10\n");
@@ -185,7 +200,9 @@ try {
             $process = new Process([...$cli, 'mutate', '--format', 'json'], $root);
             $process->start();
             $deadline = microtime(true) + 5;
-            while (!is_file($root . '/child.pid') && $process->isRunning() && microtime(true) < $deadline) { usleep(50000); }
+            while (!is_file($root . '/child.pid') && $process->isRunning() && microtime(true) < $deadline) {
+                usleep(50000);
+            }
             ensure(is_file($root . '/child.pid'), 'interrupt fixture must reach engine');
             $process->signal($interruptSignal);
             $process->wait();
@@ -195,7 +212,6 @@ try {
             ensure(!posix_kill($child, 0) || ($stat !== false && str_contains($stat, ') Z ')), 'engine child must be stopped');
         }
     }
-    // Use staged, unstaged and untracked paths from the same selector as C/D.
     infectionSettings($root, 'ok', $raw);
     [$code] = command(['git', 'init', '-q'], $root);
     [$code] = command(['git', 'add', 'src/Example.php'], $root);
@@ -229,13 +245,13 @@ try {
     ensure($code === 4, 'invalid MSI is usage error');
     infectionSettings($root, 'ok', $raw);
     $config = Config::load($root);
-    $before = InfectionReport::fingerprints($root, $config);
+    $before = InputFingerprint::compute($root, $config);
     mkdir($root . '/tests');
     file_put_contents($root . '/tests/NewTest.php', '<?php // new test');
-    ensure($before !== InfectionReport::fingerprints($root, $config), 'new tests must invalidate mutation snapshot');
-    $before = InfectionReport::fingerprints($root, $config);
+    ensure($before !== InputFingerprint::compute($root, $config), 'new tests must invalidate mutation snapshot');
+    $before = InputFingerprint::compute($root, $config);
     file_put_contents($root . '/tests/cases.csv', 'input,output');
-    ensure($before !== InfectionReport::fingerprints($root, $config), 'non-PHP test data must invalidate snapshot');
+    ensure($before !== InputFingerprint::compute($root, $config), 'non-PHP test data must invalidate snapshot');
     mkdir($root . '/empty/src', 0777, true);
     [$code] = command(['git', 'init', '-q'], $root . '/empty');
     [$code, $json] = command([...$cli, 'mutate', '--changed', '--format', 'json'], $root . '/empty');
@@ -243,31 +259,30 @@ try {
     [$code, $json] = command([...$cli, '--root', $root . '/empty', 'mutate', '--changed', '--min-msi', '80', '--format', 'json'], $root . '/empty');
     ensure($code === 3 && json_decode($json, true)['engine']['version'] === null, 'empty changed scope cannot satisfy an explicitly requested MSI gate');
 
-    // Canonical paths and a bounded input manifest exclude generated output, not test inputs.
     file_put_contents($root . '/.ub-mode.yaml', "mutator:\n  executable: bin/infection\n  input_exclude: [tests/tmp]\nreports:\n  directory: build/cdmu\n");
     infectionSettings($root, 'ok', $raw);
     $config = Config::load($root);
     $cwd = getcwd();
     chdir(dirname($root));
-    $before = InfectionReport::fingerprints(basename($root), $config);
+    $before = InputFingerprint::compute(basename($root), $config);
     mkdir($root . '/build/cdmu', 0777, true);
     file_put_contents($root . '/build/cdmu/generated.json', '{}');
-    ensure($before === InfectionReport::fingerprints(basename($root), $config), 'custom report directory must stay outside a relative-root fingerprint');
+    ensure($before === InputFingerprint::compute(basename($root), $config), 'custom report directory must stay outside a relative-root fingerprint');
     chdir($cwd);
     mkdir($root . '/tests/tmp');
     file_put_contents($root . '/tests/tmp/runtime.txt', 'temporary');
-    ensure($before === InfectionReport::fingerprints($root, $config), 'explicit temporary exclusion must be honored');
+    ensure($before === InputFingerprint::compute($root, $config), 'explicit temporary exclusion must be honored');
     file_put_contents($root . '/phpunit.xml', '<phpunit cacheDirectory="cache"><testsuites><testsuite name="tests"><directory>tests</directory></testsuite></testsuites><logging><junit outputFile="tests/junit.xml"/></logging></phpunit>');
-    $before = InfectionReport::fingerprints($root, $config);
+    $before = InputFingerprint::compute($root, $config);
     file_put_contents($root . '/tests/junit.xml', '<testsuites/>');
     mkdir($root . '/cache');
     file_put_contents($root . '/cache/results.json', '{}');
     file_put_contents($root . '/unrelated.json', '{}');
-    ensure($before === InfectionReport::fingerprints($root, $config), 'PHPUnit outputs and unrelated root data must not alter inputs');
+    ensure($before === InputFingerprint::compute($root, $config), 'PHPUnit outputs and unrelated root data must not alter inputs');
     file_put_contents($root . '/tests/cases.csv', 'changed data');
-    ensure($before !== InfectionReport::fingerprints($root, $config), 'real test data remains protected');
+    ensure($before !== InputFingerprint::compute($root, $config), 'real test data remains protected');
     symlink($root, $root . '-link');
-    ensure(InfectionReport::fingerprints($root, $config) === InfectionReport::fingerprints($root . '-link', $config), 'symlink root must be canonical');
+    ensure(InputFingerprint::compute($root, $config) === InputFingerprint::compute($root . '-link', $config), 'symlink root must be canonical');
     unlink($root . '-link');
     foreach (['src', './src', 'src/', '.'] as $directory) {
         infectionSettings($root, 'ok', $raw);
@@ -285,7 +300,10 @@ try {
     $done = new Process(['php', '-r', 'exit(0);']);
     $done->run();
     $signals = [];
-    $signalSpy = static function (int $pid, int $signal) use (&$signals): bool { $signals[] = [$pid, $signal]; return true; };
+    $signalSpy = static function (int $pid, int $signal) use (&$signals): bool {
+        $signals[] = [$pid, $signal];
+        return true;
+    };
     ensure(!ProcessSupervisor::stop($done, $signalSpy) && $signals === [], 'reaped/stale process identity must never be signaled');
     $ordinaryChild = new Process(['php', '-r', 'sleep(10);']);
     $ordinaryChild->start();
@@ -335,9 +353,10 @@ try {
     symlink($root . '/tests', $linked);
     Reports::bundle($history, '.metrics', 'uml', ['uml.json' => Reports::json(['n' => 9])]);
     ensure(is_file($foreign . '/keep.txt') && is_link($linked) && is_file($root . '/tests/cases.csv'), 'retention must not traverse symlinks or erase unmanaged data');
-    // Cleanup errors are maintenance warnings, never a rollback of a published generation.
     foreach (glob($history . '/.metrics/.cdmu/uml/*', GLOB_ONLYDIR) as $directory) {
-        if (!is_link($directory) && $directory !== $foreign) { chmod($directory, 0555); }
+        if (!is_link($directory) && $directory !== $foreign) {
+            chmod($directory, 0555);
+        }
     }
     file_put_contents($history . '/publish.php', <<<'PUBLISH'
 <?php
@@ -347,7 +366,9 @@ echo 'published';
 PUBLISH);
     [$code, $output, $error] = command(['php', $history . '/publish.php', $history, $repository . '/vendor/autoload.php'], $root);
     foreach (glob($history . '/.metrics/.cdmu/uml/*', GLOB_ONLYDIR) as $directory) {
-        if (!is_link($directory)) { chmod($directory, 0777); }
+        if (!is_link($directory)) {
+            chmod($directory, 0777);
+        }
     }
     ensure($code === 0 && $output === 'published' && str_contains($error, 'cleanup warning')
         && json_decode(file_get_contents($history . '/.metrics/uml.json'), true)['n'] === 10, 'prune failure must preserve publication and report a warning');
@@ -364,7 +385,9 @@ READER);
     $reader = new Process(['php', $history . '/reader.php', $history]);
     $reader->start();
     $deadline = microtime(true) + 3;
-    while (!is_file($history . '/reader.ready') && microtime(true) < $deadline) { usleep(10000); }
+    while (!is_file($history . '/reader.ready') && microtime(true) < $deadline) {
+        usleep(10000);
+    }
     ensure(is_file($history . '/reader.ready'), 'reader must hold its shared lock');
     Reports::bundle($history, '.metrics', 'uml', ['uml.json' => Reports::json(['n' => 11])], 1);
     $reader->wait();
@@ -372,7 +395,6 @@ READER);
     symlink('.metrics', $history . '/history-alias');
     Reports::bundle($history, 'history-alias', 'uml', ['uml.json' => Reports::json(['n' => 12])], 1);
     ensure(Reports::readBundle($history, 'history-alias', 'uml', 'uml.json')['n'] === 12, 'retention must protect current generation through an internal report-directory symlink');
-    // Nested units, output compatibility and semantic inputs share one isolated project.
     $nested = $root . '/nested';
     mkdir($nested . '/src', 0777, true);
     mkdir($nested . '/bin');
@@ -393,7 +415,7 @@ class Nested {
     }
 }
 NESTED);
-    $units = (new \UbModePhp\Analyzer\Analyzer())->analyze($nested, ['src/Nested.php'])['units'];
+    $units = (new Analyzer())->analyze($nested, ['src/Nested.php'])['units'];
     $rows = [];
     foreach ($units as $unit) {
         if (in_array($unit['kind'], ['closure', 'arrow'], true)) {
@@ -412,13 +434,15 @@ NESTED);
     ensure($node['metrics']['survived'] === 3 && $node['metrics']['mutants'] === 3
         && count($node['members'][0]['mutations']) === 3, 'class and containing method must count nested survivors once');
     $baseConfig = Config::load($nested);
-    $fingerprints = InfectionReport::fingerprints($nested, $baseConfig);
-    foreach ([['uml', 'view_limit', 17], ['reports', 'keep_generations', 1], ['reports', 'formats', ['json']],
+    $fingerprints = InputFingerprint::compute($nested, $baseConfig);
+    foreach (
+        [['uml', 'view_limit', 17], ['reports', 'keep_generations', 1], ['reports', 'formats', ['json']],
         ['mutator', 'keep_failed_runs', 1], ['mutator', 'threads', 2], ['mutator', 'process_timeout', 8],
-        ['mutator', 'min_msi', 99], ['crapper', 'threshold', 20], ['dryer', 'threshold', 0.9]] as [$group, $key, $value]) {
+        ['mutator', 'min_msi', 99], ['crapper', 'threshold', 20], ['dryer', 'threshold', 0.9]] as [$group, $key, $value]
+    ) {
         $changed = $baseConfig;
         $changed[$group][$key] = $value;
-        ensure($fingerprints === InfectionReport::fingerprints($nested, $changed), 'operational settings must not invalidate measurements: ' . $group . '.' . $key);
+        ensure($fingerprints === InputFingerprint::compute($nested, $changed), 'operational settings must not invalidate measurements: ' . $group . '.' . $key);
     }
     file_put_contents($nested . '/.ub-mode.yaml', $nestedConfig . "# presentation only\numl:\n  view_limit: 17\n");
     [$code, $json] = command([...$cli, 'uml', '--format', 'json'], $nested);
@@ -478,7 +502,9 @@ NESTED);
         $deadline = microtime(true) + 2;
         do {
             $stat = @file_get_contents('/proc/' . $child . '/stat');
-            if ($stat === false || str_contains($stat, ') Z ')) { break; }
+            if ($stat === false || str_contains($stat, ') Z ')) {
+                break;
+            }
             usleep(10000);
         } while (microtime(true) < $deadline);
         ensure($stat === false || str_contains($stat, ') Z '), 'guardian/cleanup must stop worker: ' . $mode);
@@ -498,7 +524,9 @@ NESTED);
     $owner = new Process([...$cli, 'mutate', '--format', 'json'], $nested);
     $owner->start();
     $deadline = microtime(true) + 3;
-    while (!is_file($nested . '/child.pid') && microtime(true) < $deadline) { usleep(10000); }
+    while (!is_file($nested . '/child.pid') && microtime(true) < $deadline) {
+        usleep(10000);
+    }
     ensure(is_file($nested . '/child.pid'), 'parent-death fixture must start');
     $owner->signal(SIGKILL);
     $owner->wait();
@@ -506,10 +534,17 @@ NESTED);
     $deadline = microtime(true) + 2;
     do {
         $stat = @file_get_contents('/proc/' . $child . '/stat');
-        if ($stat === false || str_contains($stat, ') Z ')) { break; }
+        if ($stat === false || str_contains($stat, ') Z ')) {
+            break;
+        }
         usleep(10000);
     } while (microtime(true) < $deadline);
     ensure($stat === false || str_contains($stat, ') Z '), 'parent disappearance must stop workers');
+    $deadline = microtime(true) + 2;
+    while (glob($nested . '/.ub-infection-*') !== [] && microtime(true) < $deadline) {
+        usleep(10000);
+    }
+    ensure(glob($nested . '/.ub-infection-*') === [], 'parent disappearance must remove the temporary Infection config');
 
     file_put_contents($root . '/fault-start.php', <<<'FAULT'
 <?php
@@ -562,7 +597,9 @@ if (in_array('--integration', $argv, true)) {
             [$code] = command(['cp', '-R', $fixture . '/' . $directory, $project . '/' . $directory], $repository);
             ensure($code === 0, 'cannot copy integration fixture');
         }
-        foreach (['composer.json', 'composer.lock', 'infection.json5', 'phpunit.xml'] as $file) { copy($fixture . '/' . $file, $project . '/' . $file); }
+        foreach (['composer.json', 'composer.lock', 'infection.json5', 'phpunit.xml'] as $file) {
+            copy($fixture . '/' . $file, $project . '/' . $file);
+        }
         mkdir($project . '/tests/tmp');
         file_put_contents($project . '/.ub-mode.yaml', "mutator:\n  input_exclude: [tests/tmp]\n");
         file_put_contents($project . '/phpunit.xml', str_replace('</phpunit>', '<logging><junit outputFile="tests/junit.xml"/></logging></phpunit>', file_get_contents($project . '/phpunit.xml')));
@@ -575,10 +612,10 @@ if (in_array('--integration', $argv, true)) {
         ensure(is_file($project . '/tests/tmp/runtime.txt'), 'runtime output during mutation must not invalidate fingerprints');
         // Infection replaces PHPUnit logging with its own temporary JUnit target.
         // Run PHPUnit directly to exercise the configured persistent output too.
-        $beforeOutputs = InfectionReport::fingerprints($project, Config::load($project));
+        $beforeOutputs = InputFingerprint::compute($project, Config::load($project));
         [$testCode, , $testError] = command(['php', $project . '/vendor/bin/phpunit', '--configuration', $project . '/phpunit.xml'], $project);
         ensure($testCode === 0 && is_file($project . '/tests/junit.xml'), 'real PHPUnit must create its configured JUnit output: ' . $testError);
-        ensure($beforeOutputs === InfectionReport::fingerprints($project, Config::load($project)), 'real PHPUnit outputs must not invalidate fingerprints');
+        ensure($beforeOutputs === InputFingerprint::compute($project, Config::load($project)), 'real PHPUnit outputs must not invalidate fingerprints');
         [$code, $uml] = command([...$cli, 'uml', '--format', 'json'], $project);
         ensure($code === 0 && json_decode($uml, true)['mutation_overlay']['status'] === 'available', 'fresh real mutation must join UML');
         $test = $project . '/tests/CalculatorTest.php';

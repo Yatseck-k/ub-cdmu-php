@@ -64,7 +64,6 @@ try {
         'Dryer EDN float shape changed',
     );
 
-    // Text presentation must not change canonical reports or exit codes.
     $canonical = [];
     foreach (['dry.json', 'crap.edn', 'dry.edn'] as $name) {
         $canonical[$name] = file_get_contents($project . '/.metrics/' . $name);
@@ -97,7 +96,6 @@ try {
         && str_contains($text, 'Reports: none') && str_contains($error, 'skipped'), 'disabled checks must not imply a pass');
     unlink($project . '/.ub-mode.yaml');
 
-    // A known, fully covered simple function passes; many duplicates stay compact.
     mkdir($project . '/presentation/src', 0777, true);
     $presentation = $project . '/presentation';
     file_put_contents($presentation . '/src/Simple.php', "<?php\nfunction simple() {\n    return 1;\n}\n");
@@ -124,6 +122,21 @@ try {
     [$status, $text, $error] = command(['php', $repository . '/bin/ub-php', 'check'], $presentation);
     ensure($status === 3 && $text === '' && str_contains($error, 'Result: FAIL') && !str_contains($error, 'Completed'), 'write failure must not claim success');
     ensure(file_get_contents($presentation . '/blocked/check.json') === 'old report', 'write failure must preserve old file');
+
+    // A full disk is simulated with a file size limit: SIGXFSZ is ignored, so writes fail with EFBIG like ENOSPC.
+    file_put_contents($presentation . '/.ub-mode.yaml', "reports:\n  directory: limited\n");
+    [$status] = command(['php', $repository . '/bin/ub-php', 'check', '--progress', 'never'], $presentation);
+    ensure($status === 0 && is_file($presentation . '/limited/check.json'), 'limited-write fixture needs a first report');
+    $oldReport = file_get_contents($presentation . '/limited/check.json');
+    [$status, $text, $error] = command(['sh', '-c', 'trap "" XFSZ; ulimit -f 1; exec "$0" "$@"', 'php', $repository . '/bin/ub-php', 'check', '--progress', 'never'], $presentation);
+    ensure(
+        $status === 3 && $text === '' && str_contains($error, 'cannot write report') && !str_contains($error, 'Notice')
+            && !str_contains($error, 'Warning') && !str_contains($error, 'Completed'),
+        'failed report write must give one clear error without PHP diagnostics: ' . $error,
+    );
+    ensure(file_get_contents($presentation . '/limited/check.json') === $oldReport, 'failed write must preserve the old report');
+    ensure(glob($presentation . '/limited/.ub-php-*') === [], 'failed write must not leave temporary files');
+    unlink($presentation . '/.ub-mode.yaml');
 
     mkdir($presentation . '/partial/crap.edn', 0777, true);
     file_put_contents($presentation . '/.ub-mode.yaml', "reports:\n  directory: partial\n");

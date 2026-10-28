@@ -2,7 +2,10 @@
 
 declare(strict_types=1);
 
-require dirname(__DIR__) . '/vendor/autoload.php';
+use UbModePhp\Mutation\InputFingerprint;
+use UbModePhp\Uml\MutationOverlay;
+
+require __DIR__ . '/../vendor/autoload.php';
 require __DIR__ . '/support.php';
 
 use UbModePhp\Config;
@@ -19,7 +22,8 @@ ensure(isset($nodes['Architecture\\Domain\\Customer'], $nodes['DateTimeImmutable
 ensure($nodes['Architecture\\Domain\\State']['kind'] === 'enum', 'enums must be distinguished');
 ensure($graph['anonymous_classes_omitted'] === 1, 'anonymous omission must be explicit');
 $edges = array_map(static fn (array $edge): string => $edge['from'] . '>' . $edge['kind'] . '>' . $edge['to'], $graph['edges']);
-foreach ([
+foreach (
+    [
     'Architecture\\Domain\\Customer>extends>Architecture\\Domain\\Base',
     'Architecture\\Domain\\Customer>implements>Architecture\\Domain\\Named',
     'Architecture\\Domain\\Customer>trait-use>Architecture\\Domain\\Identity',
@@ -29,7 +33,8 @@ foreach ([
     'Architecture\\Application\\Service>static-call>DateTimeImmutable',
     'Architecture\\Cycle\\Left>type>Architecture\\Cycle\\Right',
     'Architecture\\Cycle\\Right>type>Architecture\\Cycle\\Left',
-] as $edge) {
+    ] as $edge
+) {
     ensure(in_array($edge, $edges, true), 'missing relation: ' . $edge);
 }
 ensure($graph === Topology::extract($root, $files), 'topology must be deterministic');
@@ -79,7 +84,6 @@ try {
     [$code, $json] = command(['php', $repository . '/bin/ub-php', 'uml', '--namespace', 'Many', '--format', 'json'], $temp);
     $large = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
     ensure($code === 0 && count($large['nodes']) === 205 && count(Viewer::visible($large['nodes'], 'Many', 200)) === 200, 'view limit must not truncate canonical graph');
-    // Save a reproducible browser fixture through the real CLI, not a hand-written graph.
     if (getenv('CDMU_BROWSER_FIXTURE')) {
         copy($temp . '/.metrics/uml.html', getenv('CDMU_BROWSER_FIXTURE'));
         file_put_contents(getenv('CDMU_BROWSER_FIXTURE') . '.hostile.html', $html);
@@ -131,7 +135,7 @@ try {
     ensure($code === 0 && json_decode($json, true)['mutation_overlay']['status'] === 'unavailable', 'corrupt snapshot is unavailable data, not a programming error');
     $snapshot = ['schema_version' => '1.0', 'tool' => 'mutate', 'engine' => ['version' => '0.29.14'],
         'scope' => ['files' => ['src/Example.php']], 'status' => 'PASS', 'mutants' => [],
-        'fingerprints' => \UbModePhp\Mutation\InfectionReport::fingerprints($temp, $config)];
+        'fingerprints' => InputFingerprint::compute($temp, $config)];
     Reports::bundle($temp, '.metrics', 'mutate', ['mutate.json' => Reports::json(array_replace($snapshot, ['fingerprints' => null]))]);
     [$code, $json] = command(['php', $repository . '/bin/ub-php', 'uml', '--format', 'json'], $temp);
     ensure($code === 0 && json_decode($json, true)['mutation_overlay']['status'] === 'unavailable', 'invalid snapshot fields must be classified as unavailable data');
@@ -140,15 +144,14 @@ try {
     [$code, $json, $error] = command(['php', $repository . '/bin/ub-php', 'uml', '--format', 'json'], $temp);
     ensure($code === 0 && $error === '' && json_decode($json, true)['mutation_overlay']['status'] === 'unavailable', 'missing mutant location must be unavailable data without PHP notices');
     Reports::bundle($temp, '.metrics', 'mutate', ['mutate.json' => Reports::json($snapshot)]);
-    $overlay = new ReflectionMethod(\UbModePhp\Uml\UmlCommand::class, 'overlay');
     try {
-        $overlay->invoke(null, $temp, $config, ['src/Example.php'], static function (): array { throw new TypeError('injected fingerprint bug'); });
+        MutationOverlay::load($temp, $config, ['src/Example.php'], static function (): array {
+            throw new TypeError('injected fingerprint bug');
+        });
         throw new RuntimeException('internal error was hidden');
     } catch (TypeError $error) {
         ensure($error->getMessage() === 'injected fingerprint bug', 'internal exception must propagate, not become stale');
     }
-
-
 } finally {
     removeTree($temp);
 }

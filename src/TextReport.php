@@ -170,8 +170,12 @@ final class TextReport
     ): string {
         $style = new TerminalStyle(STDOUT);
         $lines = ['', $style->paint('CDMU | ' . $tool, '1;36')];
-        self::section($lines, 'Result: ' . $status . ' (exit ' . $code . ')', $style,
-            $status === 'FAIL' ? '1;31' : ($status === 'PASS' ? '1;32' : '1;33'));
+        self::section(
+            $lines,
+            'Result: ' . $status . ' (exit ' . $code . ')',
+            $style,
+            $status === 'FAIL' ? '1;31' : ($status === 'PASS' ? '1;32' : '1;33')
+        );
         array_push($lines, ...$summary);
         if ($findings !== []) {
             self::section($lines, 'Findings', $style);
@@ -213,8 +217,7 @@ final class TextReport
         string $title,
         TerminalStyle $style,
         string $code = '1;36',
-    ): void
-    {
+    ): void {
         $lines[] = '';
         $lines[] = $style->paint(str_repeat('-', 64), '2');
         $lines[] = $style->paint($title, $code);
