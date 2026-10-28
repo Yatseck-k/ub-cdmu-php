@@ -1,0 +1,6 @@
+{
+  source: {directories: ["src"]},
+  phpUnit: {configDir: "."},
+  mutators: {Plus: true},
+  timeout: 10
+}

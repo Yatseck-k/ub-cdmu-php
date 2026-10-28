@@ -1,6 +1,6 @@
 {
   "name": "yatseck-k/ub-cdmu-php",
-  "description": "Static CRAP and structural duplication checks for PHP projects",
+  "description": "PHP CRAP and duplication checks, optional mutation testing and offline UML",
   "type": "library",
   "license": "MIT",
   "require": {
@@ -8,14 +8,30 @@
     "ext-dom": "*",
     "ext-json": "*",
     "nikic/php-parser": "^5.0",
-    "symfony/yaml": "^7.4"
+    "symfony/yaml": "^7.4",
+    "symfony/process": "^7.4",
+    "colinodell/json5": "^3.0",
+    "ext-mbstring": "*",
+    "ext-pcntl": "*",
+    "ext-posix": "*"
   },
   "autoload": {
-    "psr-4": {"UbModePhp\\": "src/"}
+    "psr-4": {
+      "UbModePhp\\": "src/"
+    }
   },
-  "bin": ["bin/ub-php"],
+  "bin": [
+    "bin/ub-php"
+  ],
   "scripts": {
-    "test": ["php tests/analyzer.php", "php tests/run.php"],
-    "test-consumer": "php tests/consumer.php"
+    "test": [
+      "php tests/analyzer.php",
+      "php tests/run.php",
+      "@test-mutation",
+      "@test-uml"
+    ],
+    "test-consumer": "php tests/consumer.php",
+    "test-mutation": "php tests/mutation.php",
+    "test-uml": "php tests/uml.php"
   }
 }

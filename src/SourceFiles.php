@@ -12,18 +12,30 @@ use RuntimeException;
 
 final class SourceFiles
 {
+    /**
+     * @param string $root
+     * @param array<string, mixed> $config
+     * @param bool $changed
+     * @return list<string>
+     */
     public static function find(string $root, array $config, bool $changed): array
     {
+        $config['project']['exclude'][] = $config['reports']['directory'];
         $realRoot = realpath($root);
         if ($realRoot === false || !is_dir($realRoot)) {
             throw new InvalidArgumentException('root directory does not exist');
+        }
+        // An explicitly configured external report symlink is allowed; exclude the directory only inside the project.
+        $reportPath = realpath($realRoot . '/' . $config['reports']['directory']);
+        if ($reportPath !== false && Paths::isBelow($reportPath, $realRoot)) {
+            $config['project']['exclude'][] = substr($reportPath, strlen($realRoot) + 1);
         }
         $paths = $changed ? self::changed($realRoot) : self::scan($realRoot, $config['project']['source']);
         $selected = [];
         foreach ($paths as $path) {
             $real = realpath($realRoot . '/' . $path);
             if (
-                $real === false || !str_starts_with($real, $realRoot . DIRECTORY_SEPARATOR)
+                $real === false || !Paths::isBelow($real, $realRoot)
                 || !is_file($real) || pathinfo($path, PATHINFO_EXTENSION) !== 'php'
             ) {
                 continue;
@@ -61,6 +73,21 @@ final class SourceFiles
 
     private static function changed(string $root): array
     {
+        // Outside a work tree `git diff` falls back to --no-index and prints its usage text.
+        $probe = proc_open(
+            ['git', 'rev-parse', '--is-inside-work-tree'],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $probePipes,
+            $root,
+        );
+        if (is_resource($probe)) {
+            $inside = trim((string) stream_get_contents($probePipes[1]));
+            fclose($probePipes[1]);
+            fclose($probePipes[2]);
+            if (proc_close($probe) !== 0 || $inside !== 'true') {
+                throw new RuntimeException('--changed requires a Git repository; run without --changed');
+            }
+        }
         $commands = [
             ['git', 'diff', '--name-only', '--diff-filter=ACMR', '-z'],
             ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'],
@@ -88,7 +115,7 @@ final class SourceFiles
     {
         $inSource = false;
         foreach ($sources as $source) {
-            if ($path === $source || str_starts_with($path, $source . '/')) {
+            if (Paths::isAtOrBelow($path, $source)) {
                 $inSource = true;
                 break;
             }
@@ -98,7 +125,7 @@ final class SourceFiles
         }
         foreach ($exclusions as $prefix) {
             if (
-                $path === $prefix || str_starts_with($path, $prefix . '/')
+                Paths::isAtOrBelow($path, $prefix)
                 || str_contains('/' . $path, '/' . $prefix . '/')
             ) {
                 return false;

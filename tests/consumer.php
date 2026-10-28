@@ -23,6 +23,10 @@ try {
         [$consumer . '/vendor/bin/ub-php', 'check', '--format', 'json'],
         [$consumer . '/vendor/bin/ub-php', 'crap', '--format', 'json'],
         [$consumer . '/vendor/bin/ub-php', 'dry', '--format', 'json'],
+        [$consumer . '/vendor/bin/ub-php', 'check', '--progress', 'never'],
+        [$consumer . '/vendor/bin/ub-php', 'dry', '--verbose', '--progress', 'never'],
+        [$consumer . '/vendor/bin/ub-php', 'doctor', '--tools', '--format', 'json'],
+        [$consumer . '/vendor/bin/ub-php', 'uml', '--format', 'json'],
         ['git', 'init', '-q'],
         [$consumer . '/vendor/bin/ub-php', 'check', '--changed', '--format', 'json'],
         ] as $command
@@ -31,18 +35,38 @@ try {
         if ($status !== 0) {
             throw new RuntimeException('consumer command failed: ' . implode(' ', $command) . "\n" . $error);
         }
-        if (in_array('check', $command, true)) {
+        if ($command[0] === 'composer') {
+            // Path mirrors may copy the checkout's vendor tree; releases do not ship it.
+            $bundledVendor = $consumer . '/vendor/yatseck-k/ub-cdmu-php/vendor';
+            if (is_dir($bundledVendor)) {
+                removeTree($bundledVendor);
+            }
+        }
+        if (in_array('--progress', $command, true) && (!str_contains($output, 'Result: WARN') || $error !== '')) {
+            throw new RuntimeException('installed text CLI must report warnings and honor progress never');
+        }
+        if (in_array('check', $command, true) && in_array('json', $command, true)) {
             $report = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
             if (($report['tool'] ?? null) !== 'check' || count($report['entries']) < 3) {
                 throw new RuntimeException('installed binary returned invalid analysis');
             }
         }
-        if (in_array('dry', $command, true)) {
+        if (in_array('uml', $command, true)) {
+            $report = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
+            if ($report['tool'] !== 'uml' || $report['nodes'] === [] || !is_file($consumer . '/.metrics/uml.html')) {
+                throw new RuntimeException('installed package must include the offline viewer asset');
+            }
+        }
+        if (in_array('dry', $command, true) && in_array('json', $command, true)) {
             $report = json_decode($output, true, 512, JSON_THROW_ON_ERROR);
             if (count($report['candidates']) !== 1) {
                 throw new RuntimeException('installed binary did not find the duplicate');
             }
         }
+    }
+    [$status, $output, $error] = command([$consumer . '/vendor/bin/ub-php', 'mutate', '--format', 'json'], $consumer);
+    if ($status !== 3 || $output !== '' || !str_contains($error, 'vendor/bin/infection')) {
+        throw new RuntimeException('missing optional Infection must fail explicit M without breaking C/D/U');
     }
     echo "Composer consumer test passed\n";
 } finally {

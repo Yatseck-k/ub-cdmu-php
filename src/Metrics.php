@@ -13,7 +13,7 @@ final class Metrics
             $percent = Clover::forUnit($unit, $coverage);
             $score = $percent === null
                 ? null
-                : (float) ($unit['complexity'] ** 2 * (1 - $percent / 100) ** 3 + $unit['complexity']);
+                : $unit['complexity'] ** 2 * (1 - $percent / 100) ** 3 + $unit['complexity'];
             $entries[] = $unit + [
                 'coverage' => $percent,
                 'coverage_type' => 'line',
@@ -26,17 +26,35 @@ final class Metrics
         return $entries;
     }
 
-    public static function dry(array $units, float $threshold, int $minLines, int $minNodes): array
-    {
+    /**
+     * @param array<array<string, mixed>> $units
+     * @param float $threshold
+     * @param int $minLines
+     * @param int $minNodes
+     * @param (callable(int, int): void)|null $progress
+     * @return array
+     */
+    public static function dry(
+        array $units,
+        float $threshold,
+        int $minLines,
+        int $minNodes,
+        ?callable $progress = null,
+    ): array {
         $eligible = array_values(array_filter(
             $units,
             static fn (array $unit): bool => in_array($unit['kind'], ['function', 'method'], true)
                 && $unit['end_line'] - $unit['start_line'] + 1 >= $minLines
                 && $unit['node_count'] >= $minNodes,
         ));
+        $total = count($eligible);
+        if ($progress !== null) {
+            $progress(0, $total);
+        }
         $result = [];
+        $eligibleCount = count($eligible);
         foreach ($eligible as $index => $left) {
-            for ($other = $index + 1; $other < count($eligible); $other++) {
+            for ($other = $index + 1; $other < $eligibleCount; $other++) {
                 $right = $eligible[$other];
                 if ($left['kind'] !== $right['kind'] || $left['id'] === $right['id']) {
                     continue;
@@ -58,10 +76,16 @@ final class Metrics
                     ];
                 }
             }
+            if ($progress !== null && $index + 1 < $total) {
+                $progress($index + 1, $total);
+            }
         }
         usort($result, static fn (array $a, array $b): int => ($b['score'] <=> $a['score'])
             ?: ([$a['left']['file'], $a['left']['start_line'], $a['right']['file'], $a['right']['start_line']]
                 <=> [$b['left']['file'], $b['left']['start_line'], $b['right']['file'], $b['right']['start_line']]));
+        if ($progress !== null && $total > 0) {
+            $progress($total, $total);
+        }
         return $result;
     }
 

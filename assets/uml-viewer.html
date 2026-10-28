@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>CDMU · PHP architecture</title>
+<style>
+:root{font-family:system-ui,sans-serif;color:#182535;background:#f3f6fa}*{box-sizing:border-box}body{margin:0;height:100vh;display:flex;flex-direction:column}header{background:#122235;color:#f8fafc;padding:18px 24px;display:flex;align-items:center;justify-content:space-between;gap:20px}h1{font-size:20px;margin:0}header p{font-size:12px;margin:4px 0 0;color:#aec4db}.brand{font-size:11px;letter-spacing:2px;color:#70dbce;margin-bottom:5px}.toolbar{padding:14px 24px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:white;border-bottom:1px solid #dce3ec}label{font-size:12px;font-weight:600;display:flex;align-items:center;gap:7px}input,select,button{font:inherit;border:1px solid #cbd5e1;background:white;border-radius:7px;padding:8px 10px;color:#182535}input{width:240px}button{cursor:pointer}button:hover{background:#e7f4f1}button:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid #14b8a6;outline-offset:2px}.main{min-height:0;flex:1;display:grid;grid-template-columns:minmax(0,1fr) 330px}.canvas{position:relative;min-height:260px;overflow:hidden;background:radial-gradient(#d8e0e9 1px,transparent 1px);background-size:20px 20px}.canvas>svg{width:100%;height:100%;touch-action:none;user-select:none}.class-card{cursor:pointer}.class-card:focus{outline:none}.class-card:focus rect{stroke:#0d9488;stroke-width:4}.class-card.selected rect{stroke:#0d9488;stroke-width:4}.edge path{transition:opacity .12s}.inspector{border-left:1px solid #dce3ec;background:white;padding:22px;overflow:auto}h2{font-size:15px;margin:0 0 12px}h3{font-size:12px;text-transform:uppercase;letter-spacing:1px;margin:24px 0 10px;color:#607185}.inspector p,.inspector li{font-size:12px;line-height:1.7;overflow-wrap:anywhere}.inspector ul{padding-left:18px}pre{white-space:pre-wrap;word-break:break-word;font-size:11px;background:#f3f6fa;padding:10px;border-radius:7px}.muted{color:#63758a}.legend{display:flex;gap:14px;align-items:center;font-size:12px;flex-wrap:wrap;padding:12px 24px;background:white;border-top:1px solid #dce3ec}.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}.ok{background:#16875a}.warn{background:#d97706}.fail{background:#dc2626}.unknown{background:#94a3b8}#count{font-size:12px;color:#63758a;margin-left:auto}#notice{font-size:12px;padding:10px 24px;background:#fff7e8;border-bottom:1px solid #f3dfba}#zoom-value{font-size:12px;min-width:40px;text-align:center}.badge{font-size:11px;background:#243c54;color:#b8ddd9;padding:6px 10px;border-radius:20px}.empty{font-size:13px;fill:#63758a}@media(max-width:850px){.main{grid-template-columns:1fr}.inspector{max-height:210px;border-top:1px solid #dce3ec}.toolbar{padding:10px}input{width:170px}.legend{padding:8px 12px}}
+</style>
+</head>
+<body>
+<header><div><div class="brand">CDMU / UML</div><h1>PHP architecture</h1><p>Explore classes, dependencies and measured quality.</p></div><span class="badge">Offline · static analysis</span></header>
+<div class="toolbar">
+<label>Search <input id="search" type="search" placeholder="Class or namespace…"></label>
+<label>Namespace <select id="namespace"><option value="">All namespaces</option></select></label>
+<button id="zoom-in" aria-label="Zoom in">+</button><span id="zoom-value">100%</span><button id="zoom-out" aria-label="Zoom out">−</button><button id="reset">Reset view</button>
+<span id="count" role="status"></span>
+</div>
+<div id="notice" role="status"></div>
+<div class="main"><div class="canvas" id="canvas">{{SVG}}</div><aside class="inspector" aria-label="Class details"><h2 id="detail-title">Select a class</h2><div id="details"><p class="muted">Click a card to inspect members and metrics. Connected classes stay highlighted.</p></div></aside></div>
+<div class="legend"><span><i class="dot ok"></i>PASS / killed</span><span><i class="dot warn"></i>Survived / incomplete</span><span><i class="dot fail"></i>CRAP violation</span><span><i class="dot unknown"></i>Unknown / stale / unavailable</span><span class="muted">Drag to pan · wheel or +/− to zoom · arrows to move · 0 to reset</span></div>
+<script id="graph-data" type="application/json">{{DATA}}</script>
+<script>
+'use strict';
+const graph=JSON.parse(document.getElementById('graph-data').textContent);
+const svg=document.querySelector('#canvas svg'),query=document.getElementById('search'),namespaces=document.getElementById('namespace');
+const NS='http://www.w3.org/2000/svg', allNodes=graph.nodes;
+const make=(tag,attrs={},text)=>{const node=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))node.setAttribute(k,v);if(text!==undefined)node.textContent=text;return node;};
+const palette={PASS:'#16875a',FAIL:'#dc2626',killed:'#16875a',survived:'#d97706',incomplete:'#d97706'};
+for(const name of [...new Set(allNodes.map(n=>n.namespace).filter(Boolean).concat(graph.scope.namespace||[]))].sort()) {const option=document.createElement('option');option.value=name;option.textContent=name;namespaces.append(option);}
+namespaces.value=graph.scope.namespace;
+let layer,shown=[],selected=null,zoom=1,panX=0,panY=0;
+const notice=document.getElementById('notice');notice.textContent='Mutation overlay: '+graph.mutation_overlay.status+' — '+graph.mutation_overlay.reason+'. Dynamic dependencies and docblock types are not inferred. '+(graph.diagnostics||[]).join(' ');
+function transform(){layer.setAttribute('transform',`translate(${panX},${panY}) scale(${zoom})`);document.getElementById('zoom-value').textContent=Math.round(zoom*100)+'%';}
+function reset(){zoom=1;panX=0;panY=0;transform();}
+function connection(x,y,tx,ty){
+ if(x===tx){const sx=x+170,sy=ty>y?y+210:y,ex=tx+170,ey=ty>y?ty:ty+210,mid=(sy+ey)/2;return [`M${sx} ${sy} C${sx} ${mid} ${ex} ${mid} ${ex} ${ey}`,sx+25,mid];}
+ const sx=tx>x?x+340:x,ex=tx>x?tx:tx+340,sy=y+105,ey=ty+105,mid=(sx+ex)/2;return [`M${sx} ${sy} C${mid} ${sy} ${mid} ${ey} ${ex} ${ey}`,mid,(sy+ey)/2-6];
+}
+function render(){
+ const prefix=namespaces.value,search=query.value.toLowerCase();
+ const matching=allNodes.filter(n=>(!prefix||n.namespace===prefix||n.namespace.startsWith(prefix+'\\'))&&n.id.toLowerCase().includes(search));
+ shown=matching.slice(0,graph.scope.view_limit);
+ document.getElementById('count').textContent=`${shown.length} shown / ${matching.length} matching / ${allNodes.length} total`+(matching.length>shown.length?` · ${matching.length-shown.length} hidden; narrow the search`:'');
+ svg.replaceChildren();svg.setAttribute('viewBox',`0 0 1240 ${Math.max(400,1240*svg.clientHeight/Math.max(svg.clientWidth,1))}`);
+ const defs=make('defs'),marker=make('marker',{id:'arrow',markerWidth:10,markerHeight:10,refX:9,refY:3,orient:'auto'});marker.append(make('path',{d:'M0,0 L0,6 L9,3 z',fill:'#64748b'}));defs.append(marker);svg.append(defs);layer=make('g');svg.append(layer);
+ const positions=new Map(shown.map((n,i)=>[n.id,[40+(i%3)*400,75+Math.floor(i/3)*260]]));
+ for(const edge of graph.edges){if(!positions.has(edge.from)||!positions.has(edge.to))continue;const [x,y]=positions.get(edge.from),[tx,ty]=positions.get(edge.to);const [path,lx,ly]=connection(x,y,tx,ty);const g=make('g',{class:'edge','data-from':edge.from,'data-to':edge.to});g.append(make('path',{d:path,fill:'none',stroke:'#64748b','stroke-width':1.5,'marker-end':'url(#arrow)','stroke-dasharray':['extends','implements'].includes(edge.kind)?'':'5 4'}),make('text',{x:lx,y:ly,'text-anchor':'middle','font-size':9,fill:'#475569'},edge.kind),make('title',{},`${edge.from} → ${edge.to} (${edge.kind})`));layer.append(g);}
+ for(const node of shown){const [x,y]=positions.get(node.id),card=make('g',{class:'class-card','data-id':node.id,transform:`translate(${x},${y})`,tabindex:0,role:'button','aria-label':node.id});card.append(make('rect',{width:340,height:210,rx:10,fill:'white',stroke:node.kind==='ambiguous'?'#d97706':node.metrics.crap_status==='FAIL'?'#dc2626':'#94a3b8','stroke-width':2,'stroke-dasharray':node.external?'5 4':''}));
+ const short=text=>text.length>44?text.slice(0,41)+'…':text;
+ card.append(make('text',{x:14,y:23,'font-size':11,fill:'#63758a'},short(node.namespace||'(global)')),make('text',{x:14,y:47,'font-size':16,'font-weight':600,fill:'#182535'},short(node.name+' ['+node.kind+']')));
+ card.append(make('text',{x:14,y:72,'font-size':11,fill:palette[node.metrics.crap_status]||'#63758a'},'C: '+node.metrics.crap_status),make('text',{x:130,y:72,'font-size':11,fill:palette[node.metrics.mutation_status]||'#63758a'},'M: '+node.metrics.mutation_status));
+ (node.definitions||[]).slice(0,3).forEach((d,i)=>card.append(make('text',{x:14,y:99+i*20,'font-size':11,fill:'#92400e'},short(d.file+':'+d.start_line))));
+ node.members.slice(0,5).forEach((m,i)=>card.append(make('text',{x:14,y:99+i*20,'font-size':11,fill:'#334155'},short((m.visibility==='private'?'-':m.visibility==='protected'?'#':'+')+' '+m.name+(m.kind==='method'?'()':'')+(m.type?': '+m.type:'')))));
+ card.append(make('title',{},node.id));card.addEventListener('click',()=>select(node.id));card.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select(node.id);}});layer.append(card);
+ }
+ if(!shown.length)layer.append(make('text',{x:40,y:90,class:'empty'},'No classes match. Clear search or select another namespace.'));
+ transform();highlight();
+}
+function paragraph(container,text){const p=document.createElement('p');p.textContent=text;container.append(p);}
+function heading(container,text){const h=document.createElement('h3');h.textContent=text;container.append(h);}
+function select(id){
+ selected=id;const node=allNodes.find(n=>n.id===id),details=document.getElementById('details');details.replaceChildren();document.getElementById('detail-title').textContent=node.id;
+ paragraph(details,node.kind+(node.abstract?' · abstract':'')+(node.final?' · final':''));if(node.kind==='ambiguous'){paragraph(details,'Multiple definitions; metrics are unknown.');for(const d of node.definitions)paragraph(details,d.file+':'+d.start_line+'–'+d.end_line+' ['+d.kind+']');}else paragraph(details,node.file?node.file+':'+node.start_line+'–'+node.end_line:'External type; source not scanned');
+ heading(details,'Quality');paragraph(details,'CRAP: '+node.metrics.crap_status+' · Mutation: '+node.metrics.mutation_status);paragraph(details,`${node.metrics.mutants} mutants · ${node.metrics.survived} survivors`);
+ heading(details,'Members');
+ for(const member of node.members){paragraph(details,member.visibility+' '+member.name+(member.kind==='method'?'('+member.parameters.map(p=>p.name+(p.type?': '+p.type:'')).join(', ')+')':'')+(member.type?': '+member.type:'')+' · line '+member.line);if(member.metrics)paragraph(details,'CC '+member.metrics.complexity+' · coverage '+(member.metrics.coverage??'unknown')+' · CRAP '+(member.metrics.crap??'unknown'));for(const mutant of member.mutations||[]){paragraph(details,mutant.status+' · '+mutant.mutator);const pre=document.createElement('pre');pre.textContent=mutant.diff;details.append(pre);}}
+ heading(details,'Relations');for(const edge of graph.edges.filter(e=>e.from===id||e.to===id))paragraph(details,edge.from+' → '+edge.to+' ['+edge.kind+']');highlight();
+}
+function highlight(){if(!layer)return;const neighbors=new Set([selected]);for(const e of graph.edges){if(e.from===selected)neighbors.add(e.to);if(e.to===selected)neighbors.add(e.from);}for(const card of layer.querySelectorAll('.class-card')){card.classList.toggle('selected',card.dataset.id===selected);card.style.opacity=!selected||neighbors.has(card.dataset.id)?'1':'.25';}for(const edge of layer.querySelectorAll('.edge'))edge.style.opacity=!selected||edge.dataset.from===selected||edge.dataset.to===selected?'1':'.08';}
+function changeZoom(factor){zoom=Math.max(.15,Math.min(4,zoom*factor));transform();}
+query.addEventListener('input',()=>{selected=null;render();reset();});namespaces.addEventListener('change',()=>{selected=null;render();reset();});
+document.getElementById('zoom-in').onclick=()=>changeZoom(1.2);document.getElementById('zoom-out').onclick=()=>changeZoom(1/1.2);document.getElementById('reset').onclick=reset;
+svg.addEventListener('wheel',e=>{e.preventDefault();changeZoom(e.deltaY<0?1.1:1/1.1);},{passive:false});
+let drag=null;svg.addEventListener('pointerdown',e=>{if(e.target.closest('.class-card'))return;drag=[e.clientX,e.clientY,panX,panY];svg.setPointerCapture(e.pointerId);});svg.addEventListener('pointermove',e=>{if(!drag)return;const scale=1240/Math.max(svg.clientWidth,1);panX=drag[2]+(e.clientX-drag[0])*scale;panY=drag[3]+(e.clientY-drag[1])*scale;transform();});svg.addEventListener('pointerup',()=>{drag=null;});svg.addEventListener('pointercancel',()=>{drag=null;});
+document.addEventListener('keydown',e=>{if(['INPUT','SELECT','TEXTAREA','BUTTON'].includes(e.target.tagName))return;const shifts={ArrowLeft:[40,0],ArrowRight:[-40,0],ArrowUp:[0,40],ArrowDown:[0,-40]};if(shifts[e.key]){e.preventDefault();panX+=shifts[e.key][0];panY+=shifts[e.key][1];transform();}else if(e.key==='+'||e.key==='='){changeZoom(1.2);}else if(e.key==='-'){changeZoom(1/1.2);}else if(e.key==='0'){reset();}});
+window.addEventListener('resize',render);render();
+</script>
+</body>
+</html>

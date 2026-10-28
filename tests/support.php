@@ -17,7 +17,9 @@ function command(array $arguments, string $directory): array
     $error = stream_get_contents($pipes[2]);
     fclose($pipes[1]);
     fclose($pipes[2]);
-    return [proc_close($process), $output, $error];
+    $status = proc_close($process);
+    clearstatcache(true); // A subprocess may atomically replace a report-generation symlink.
+    return [$status, $output, $error];
 }
 
 function removeTree(string $directory): void

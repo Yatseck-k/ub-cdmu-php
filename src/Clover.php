@@ -26,18 +26,18 @@ final class Clover
         $coverage = [];
         $realRoot = realpath($root);
         $xpath = new DOMXPath($document);
-        foreach ($xpath->query('//file') as $file) {
+        foreach ($xpath->query('//file') ?: [] as $file) {
             if (!$file instanceof DOMElement || $file->getAttribute('name') === '') {
                 continue;
             }
             $name = $file->getAttribute('name');
             $real = realpath(str_starts_with($name, '/') ? $name : $root . '/' . $name);
-            if ($real === false || !str_starts_with($real, $realRoot . DIRECTORY_SEPARATOR)) {
+            if ($real === false || $realRoot === false || !Paths::isBelow($real, $realRoot)) {
                 continue;
             }
             $relative = str_replace(DIRECTORY_SEPARATOR, '/', substr($real, strlen($realRoot) + 1));
             $coverage[$relative] ??= [];
-            foreach ($xpath->query('./line', $file) as $line) {
+            foreach ($xpath->query('./line', $file) ?: [] as $line) {
                 if (!$line instanceof DOMElement || $line->getAttribute('type') !== 'stmt') {
                     continue;
                 }
