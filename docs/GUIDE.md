@@ -125,7 +125,7 @@ vendor/bin/ub-php uml
 # then open .metrics/uml.html in a browser
 ```
 
-It needs no server or internet and does not run project code. For one part of the diagram: `uml --namespace 'App\Domain'`. The diagram is a snapshot: regenerate it after edits. `--changed` is not supported for UML.
+It needs no server or internet and does not run project code. Classes are laid out left to right (a class sits left of the classes it depends on), colored by namespace; PHP and vendor classes are hidden until you tick "External types", and the checkboxes above the diagram switch relation groups on and off. Click a class to highlight its relations. For one part of the diagram: `uml --namespace 'App\Domain'`. The diagram is a snapshot: regenerate it after edits. `--changed` is not supported for UML.
 
 ## Common problems
 

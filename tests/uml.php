@@ -10,6 +10,7 @@ require __DIR__ . '/support.php';
 
 use UbModePhp\Config;
 use UbModePhp\Reports;
+use UbModePhp\Uml\Layout;
 use UbModePhp\Uml\Topology;
 use UbModePhp\Uml\Viewer;
 
@@ -49,6 +50,38 @@ $svg = Viewer::svg($report);
 $document = new DOMDocument();
 ensure($document->loadXML($svg, LIBXML_NONET), 'standalone SVG must be valid XML');
 ensure($svg === Viewer::svg($report), 'SVG must be deterministic');
+ensure(!str_contains($svg, 'data-id="DateTimeImmutable"'), 'external types must be hidden by default');
+
+$shown = Viewer::visible($report['nodes'], '', $report['scope']['view_limit']);
+$projectClasses = array_filter($report['nodes'], static fn (array $node): bool => !$node['external']);
+ensure(count($shown) === count($projectClasses), 'only project classes are shown by default');
+ensure(count(Viewer::visible($report['nodes'], '', 200, true)) === count($report['nodes']), 'external types can be shown on request');
+$layout = Layout::compute($shown, $report['edges']);
+ensure($layout === Layout::compute($shown, $report['edges']), 'layout must be deterministic');
+ensure(count($layout['cards']) === count($shown) && $layout['width'] > 0 && $layout['height'] > 0, 'every shown class gets a card');
+$byLayer = [];
+foreach ($layout['cards'] as $id => $card) {
+    $byLayer[$card['layer']][] = $card;
+}
+foreach ($byLayer as $cards) {
+    usort($cards, static fn (array $a, array $b): int => $a['y'] <=> $b['y']);
+    foreach ($cards as $index => $card) {
+        ensure($index === 0 || $card['y'] >= $cards[$index - 1]['y'] + $cards[$index - 1]['height'], 'cards in a layer must not overlap');
+    }
+}
+$reversed = 0;
+foreach ($layout['edges'] as $edge) {
+    $from = $layout['cards'][$edge['from']]['layer'];
+    $to = $layout['cards'][$edge['to']]['layer'];
+    ensure($from !== $to && $edge['reversed'] === ($from > $to), 'related classes sit in different layers');
+    $reversed += (int) $edge['reversed'];
+}
+ensure($reversed === 1, 'a dependency cycle must produce exactly one reversed relation');
+$byGroup = static fn (array $groups): array => array_unique(array_column(Layout::compute($shown, $report['edges'], $groups)['edges'], 'group'));
+ensure($byGroup(['inherit' => false, 'type' => false, 'calls' => false]) === [], 'hidden groups draw no relations');
+ensure($byGroup(['inherit' => true, 'type' => false, 'calls' => false]) === ['inherit'], 'only the requested group is drawn');
+$empty = Layout::compute([], []);
+ensure($empty['cards'] === [] && $empty['edges'] === [] && $empty['width'] > 0, 'an empty view must still lay out');
 $report['nodes'][0]['name'] = '</script><script>globalThis.injected=true</script>';
 $html = Viewer::html($report);
 ensure(!str_contains($html, '<script>globalThis.injected=true</script>'), 'source labels must not inject HTML/script');
