@@ -42,4 +42,20 @@ $invalid = $analyzer->analyze($root, ['plain-php/invalid/Invalid.php']);
 if (count($invalid['diagnostics']) !== 1 || $invalid['units'] !== []) {
     throw new RuntimeException('invalid PHP must produce a diagnostic, not units');
 }
+$duplicateUnits = $analyzer->analyze($root, ['laravel/OrderService.php', 'symfony/OrderService.php'])['units'];
+$events = [];
+$plain = \UbModePhp\Metrics::dry($duplicateUnits, 0.82, 4, 20);
+$observed = \UbModePhp\Metrics::dry($duplicateUnits, 0.82, 4, 20, static function (int $done, int $total) use (&$events): void {
+    $events[] = [$done, $total];
+});
+if ($plain !== $observed || count($plain) !== 1 || $events !== [[0, 2], [1, 2], [2, 2]]) {
+    throw new RuntimeException('DRY progress must cover compared units without changing results');
+}
+$events = [];
+$empty = \UbModePhp\Metrics::dry([], 0.82, 4, 20, static function (int $done, int $total) use (&$events): void {
+    $events[] = [$done, $total];
+});
+if ($empty !== [] || $events !== [[0, 0]]) {
+    throw new RuntimeException('DRY progress must describe empty eligible input');
+}
 echo "PHP analyzer tests passed\n";

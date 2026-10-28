@@ -14,9 +14,16 @@ final class SourceFiles
 {
     public static function find(string $root, array $config, bool $changed): array
     {
+        $config['project']['exclude'][] = $config['reports']['directory'];
         $realRoot = realpath($root);
         if ($realRoot === false || !is_dir($realRoot)) {
             throw new InvalidArgumentException('root directory does not exist');
+        }
+        // C/D historically allow an explicitly configured external output symlink.
+        // Only add the canonical exclusion when it is a path inside this project.
+        $reportPath = realpath($realRoot . '/' . $config['reports']['directory']);
+        if ($reportPath !== false && str_starts_with($reportPath, $realRoot . '/')) {
+            $config['project']['exclude'][] = substr($reportPath, strlen($realRoot) + 1);
         }
         $paths = $changed ? self::changed($realRoot) : self::scan($realRoot, $config['project']['source']);
         $selected = [];
@@ -61,6 +68,21 @@ final class SourceFiles
 
     private static function changed(string $root): array
     {
+        // Outside a work tree `git diff` falls back to --no-index and prints its whole usage text.
+        $probe = proc_open(
+            ['git', 'rev-parse', '--is-inside-work-tree'],
+            [1 => ['pipe', 'w'], 2 => ['pipe', 'w']],
+            $probePipes,
+            $root,
+        );
+        if (is_resource($probe)) {
+            $inside = trim((string) stream_get_contents($probePipes[1]));
+            fclose($probePipes[1]);
+            fclose($probePipes[2]);
+            if (proc_close($probe) !== 0 || $inside !== 'true') {
+                throw new RuntimeException('--changed requires a Git repository; run without --changed');
+            }
+        }
         $commands = [
             ['git', 'diff', '--name-only', '--diff-filter=ACMR', '-z'],
             ['git', 'diff', '--cached', '--name-only', '--diff-filter=ACMR', '-z'],

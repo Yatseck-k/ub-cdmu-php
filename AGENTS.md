@@ -10,7 +10,7 @@ Use PHP 8.2+ and Composer 2. From the repository root, run `composer install`, `
 
 ## Coding Style & Naming Conventions
 
-Use PSR-12 style and `PascalCase` PHP class names. Keep metric calculations pure and AST extraction read-only. Preserve stable ordering in reports and validate external input before calculation. Do not execute or edit analyzed PHP source. Report JSON keeps schema version `1.0`.
+Use PSR-12 style and `PascalCase` PHP class names. Keep metric calculations pure and AST extraction read-only. Preserve stable ordering in reports and validate external input before calculation. C/D/U commands must not execute or edit analyzed PHP source. Only the explicit `mutate` command may run project tests through installed Infection; mutants belong to owned temporary directories. Never rewrite original source or user configuration. Report JSON keeps schema version `1.0`.
 
 ## Testing Guidelines
 

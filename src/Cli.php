@@ -16,43 +16,33 @@ final class Cli
     public function run(array $arguments): int
     {
         try {
-            [$root, $configPath, $command, $format, $changed, $threshold] = $this->parse($arguments);
+            [$root, $configPath, $command, $format, $changed, $threshold, $progressMode, $verbose, $tools, $minimum, $namespace] = $this->parse($arguments);
         } catch (InvalidArgumentException $error) {
             fwrite(STDERR, 'ub-php: ' . $error->getMessage() . "\n");
             return 4;
         }
         if ($command === 'doctor') {
-            return $this->doctor($root, $format);
+            return $this->doctor($root, $format, $tools, $configPath);
         }
+        $progress = new Progress($progressMode === 'always' || ($progressMode === 'auto' && $format === 'text'));
         try {
+            $canonicalRoot = realpath($root);
+            if ($canonicalRoot === false || !is_dir($canonicalRoot)) {
+                throw new RuntimeException('root directory does not exist');
+            }
+            $root = $canonicalRoot;
             $config = Config::load($root, $configPath);
+            if (in_array($command, ['mutate', 'uml'], true)) {
+                $options = ['changed' => $changed, 'format' => $format, 'verbose' => $verbose,
+                    'min_msi' => $minimum, 'namespace' => $namespace,
+                    'config_path' => $configPath ?? $root . '/.ub-mode.yaml'];
+                return $command === 'mutate'
+                    ? Mutation\MutationCommand::run($root, $config, $options, $progress)
+                    : Uml\UmlCommand::run($root, $config, $options, $progress);
+            }
             $files = SourceFiles::find($root, $config, $changed);
             if (!$changed && $files === []) {
                 throw new InvalidArgumentException('no PHP files found in configured source directories');
-            }
-            $showProgress = $format === 'text' && $files !== []
-                && function_exists('stream_isatty') && stream_isatty(STDERR);
-            $progressWidth = 0;
-            $progress = null;
-            if ($showProgress) {
-                $this->writeProgress(0, count($files), 'starting', $progressWidth);
-                $progress = function (int $completed, int $total, string $file) use (&$progressWidth): void {
-                    $this->writeProgress($completed, $total, $file, $progressWidth);
-                };
-            }
-            try {
-                $analysis = (new Analyzer())->analyze($root, $files, $progress);
-            } finally {
-                if ($showProgress) {
-                    fwrite(STDERR, "\n");
-                }
-            }
-            if ($analysis['diagnostics'] !== []) {
-                $messages = array_map(
-                    static fn (array $item): string => $item['file'] . ': ' . $item['message'],
-                    $analysis['diagnostics'],
-                );
-                throw new RuntimeException(implode('; ', $messages));
             }
             $runCrap = in_array($command, ['check', 'crap'], true) && $config['crapper']['enabled'];
             $runDry = in_array($command, ['check', 'dry'], true) && $config['dryer']['enabled'];
@@ -63,21 +53,62 @@ final class Cli
             if ($runDry && $dryThreshold > 1) {
                 throw new InvalidArgumentException('Dryer threshold must be between 0 and 1');
             }
-            $coverage = [];
+            if ($files === []) {
+                $progress->skip(1, 'Parsing PHP', 'no changed PHP files');
+            } else {
+                $progress->stage(1, 'Parsing PHP', count($files));
+            }
+            $analysis = (new Analyzer())->analyze(
+                $root,
+                $files,
+                static fn (int $done, int $total, string $file) => $progress->update($done, $total, $file),
+            );
+            if ($analysis['diagnostics'] !== []) {
+                $messages = array_map(
+                    static fn (array $item): string => $item['file'] . ': ' . $item['message'],
+                    $analysis['diagnostics'],
+                );
+                throw new RuntimeException(implode('; ', $messages));
+            }
+            $entries = [];
             if ($runCrap) {
+                if ($analysis['units'] === []) {
+                    $progress->skip(2, 'Calculating CRAP', 'no units');
+                } else {
+                    $progress->stage(2, 'Calculating CRAP');
+                }
+                $coverage = [];
                 $coveragePath = $root . '/' . $config['crapper']['coverage']['path'];
                 if (file_exists($coveragePath)) {
                     $coverage = Clover::read($coveragePath, $root);
                 }
+                $entries = Metrics::crap($analysis['units'], $coverage, $crapThreshold);
+                if ($analysis['units'] !== []) {
+                    $progress->update(1, 1);
+                }
+            } else {
+                $progress->skip(2, 'Calculating CRAP', 'disabled or not selected');
             }
-            $entries = $runCrap ? Metrics::crap($analysis['units'], $coverage, $crapThreshold) : [];
-            $candidates = $runDry
-                ? Metrics::dry(
+            $candidates = [];
+            if ($runDry && $analysis['units'] !== []) {
+                $candidates = Metrics::dry(
                     $analysis['units'],
                     $dryThreshold,
                     $config['dryer']['min_lines'],
                     $config['dryer']['min_nodes'],
-                ) : [];
+                    static function (int $done, int $total) use ($progress): void {
+                        if ($total === 0) {
+                            $progress->skip(3, 'Comparing duplicates', 'no eligible units');
+                        } elseif ($done === 0) {
+                            $progress->stage(3, 'Comparing duplicates', $total);
+                        } else {
+                            $progress->update($done, $total);
+                        }
+                    },
+                );
+            } else {
+                $progress->skip(3, 'Comparing duplicates', $runDry ? 'no units' : 'disabled or not selected');
+            }
             $report = [
                 'schema_version' => self::VERSION,
                 'tool' => $command,
@@ -87,35 +118,51 @@ final class Cli
             ];
             $serialized = Reports::json($report);
             $directory = $root . '/' . $config['reports']['directory'];
+            $reports = [];
             if (in_array('json', $config['reports']['formats'], true)) {
-                Reports::atomic($directory . '/' . $command . '.json', $serialized);
+                $reports[$directory . '/' . $command . '.json'] = $serialized;
             }
             if (in_array('edn', $config['reports']['formats'], true)) {
                 if ($runCrap) {
-                    Reports::atomic($directory . '/crap.edn', Reports::crapEdn($entries));
+                    $reports[$directory . '/crap.edn'] = Reports::crapEdn($entries);
                 }
                 if ($runDry) {
-                    Reports::atomic($directory . '/dry.edn', Reports::dryEdn($candidates));
+                    $reports[$directory . '/dry.edn'] = Reports::dryEdn($candidates);
                 }
             }
-            $this->output(
-                $format,
-                $serialized,
-                $files,
-                $entries,
-                $candidates,
-                $runCrap,
-                $runDry,
-                $crapThreshold,
-                $dryThreshold,
-            );
+            $paths = [];
+            if ($reports === []) {
+                $progress->skip(4, 'Saving reports', 'no report formats enabled for selected checks');
+            } else {
+                $progress->stage(4, 'Saving reports', count($reports));
+                foreach ($reports as $path => $content) {
+                    Reports::atomic($path, $content);
+                    $paths[] = $path;
+                    $progress->update(count($paths), count($reports), $path);
+                }
+            }
+            $progress->complete();
             $hasFailure = count(array_filter(
                 $entries,
                 static fn (array $entry): bool => $entry['exceeded_threshold'],
             )) > 0;
-            return in_array('exceeded_crap_threshold', $config['quality']['fail_on'], true) && $hasFailure ? 2 : 0;
+            $unknown = count(array_filter($entries, static fn (array $entry): bool => $entry['coverage'] === null));
+            $exitCode = in_array('exceeded_crap_threshold', $config['quality']['fail_on'], true) && $hasFailure ? 2 : 0;
+            $hasWarning = $unknown > 0 || $hasFailure || $candidates !== []
+                || $files === [] || (!$runCrap && !$runDry);
+            $status = $exitCode === 2 ? 'FAIL' : ($hasWarning ? 'WARN' : 'PASS');
+            $unitCount = count($analysis['units']);
+            echo $format === 'json' ? $serialized : TextReport::render(compact(
+                'root', 'command', 'changed', 'files', 'unitCount', 'entries', 'candidates',
+                'runCrap', 'runDry', 'crapThreshold', 'dryThreshold', 'paths', 'status', 'exitCode', 'verbose',
+            ));
+            return $exitCode;
         } catch (Throwable $error) {
+            $progress->fail();
             fwrite(STDERR, 'ub-php: ' . $error->getMessage() . "\n");
+            if ($format === 'text') {
+                fwrite(STDERR, "Result: FAIL (exit 3) | analysis incomplete; no successful result for this run.\n");
+            }
             return 3;
         }
     }
@@ -128,6 +175,11 @@ final class Cli
         $format = 'text';
         $changed = false;
         $threshold = null;
+        $progressMode = 'auto';
+        $verbose = false;
+        $tools = false;
+        $minimum = null;
+        $namespace = null;
         for ($index = 0; $index < count($arguments); $index++) {
             $argument = $arguments[$index];
             if ($command === null && in_array($argument, ['--root', '--config'], true)) {
@@ -140,16 +192,36 @@ final class Cli
                 } else {
                     $config = $value;
                 }
-            } elseif ($command === null && in_array($argument, ['doctor', 'check', 'crap', 'dry'], true)) {
+            } elseif ($command === null && in_array($argument, ['doctor', 'check', 'crap', 'dry', 'mutate', 'uml'], true)) {
                 $command = $argument;
+            } elseif ($command === 'doctor' && $argument === '--tools') {
+                $tools = true;
+            } elseif ($command === 'mutate' && $argument === '--min-msi') {
+                $value = $arguments[++$index] ?? '';
+                if (!is_numeric($value) || !is_finite((float) $value) || (float) $value < 0 || (float) $value > 100) {
+                    throw new InvalidArgumentException('--min-msi must be 0..100');
+                }
+                $minimum = (float) $value;
+            } elseif ($command === 'uml' && $argument === '--namespace') {
+                $namespace = $arguments[++$index] ?? '';
+                if ($namespace === '' || !preg_match('/^[a-zA-Z_\\\\][a-zA-Z0-9_\\\\]*$/', $namespace)) {
+                    throw new InvalidArgumentException('--namespace needs a PHP namespace prefix');
+                }
             } elseif ($command !== null && $argument === '--format') {
                 $format = $arguments[++$index] ?? '';
                 if (!in_array($format, ['text', 'json'], true)) {
                     throw new InvalidArgumentException('--format must be text or json');
                 }
-            } elseif ($command !== null && $command !== 'doctor' && $argument === '--changed') {
+            } elseif ($command !== null && $command !== 'doctor' && $argument === '--progress') {
+                $progressMode = $arguments[++$index] ?? '';
+                if (!in_array($progressMode, ['auto', 'always', 'never'], true)) {
+                    throw new InvalidArgumentException('--progress must be auto, always or never');
+                }
+            } elseif ($command !== null && $command !== 'doctor' && $argument === '--verbose') {
+                $verbose = true;
+            } elseif ($command !== null && in_array($command, ['check', 'crap', 'dry', 'mutate'], true) && $argument === '--changed') {
                 $changed = true;
-            } elseif ($command !== null && $command !== 'doctor' && $argument === '--threshold') {
+            } elseif ($command !== null && in_array($command, ['check', 'crap', 'dry'], true) && $argument === '--threshold') {
                 $value = $arguments[++$index] ?? null;
                 if (
                     $command === 'check' || $value === null || !is_numeric($value)
@@ -165,11 +237,35 @@ final class Cli
         if ($command === null) {
             throw new InvalidArgumentException('missing command');
         }
-        return [$root, $config, $command, $format, $changed, $threshold];
+        return [$root, $config, $command, $format, $changed, $threshold, $progressMode, $verbose, $tools, $minimum, $namespace];
     }
 
-    private function doctor(string $root, string $format): int
+    private function doctor(string $root, string $format, bool $tools, ?string $configPath): int
     {
+        if ($tools) {
+            try {
+                $config = Config::load($root, $configPath);
+                try {
+                    $version = Mutation\InfectionRunner::version($root, $config);
+                    $mutation = ['available' => true, 'version' => $version, 'reason' => null];
+                } catch (Throwable $error) {
+                    $mutation = ['available' => false, 'version' => null, 'reason' => $error->getMessage()];
+                }
+                $report = ['schema_version' => '1.0', 'tool' => 'doctor-tools', 'tools' => [
+                    'mutation' => $mutation,
+                    'uml' => ['available' => true, 'engine' => 'php-parser'],
+                    'process_control' => ['available' => function_exists('posix_setsid') && function_exists('posix_kill') && function_exists('pcntl_async_signals')],
+                    'coverage_runtime' => ['available' => extension_loaded('xdebug') || extension_loaded('pcov') || PHP_SAPI === 'phpdbg'],
+                ]];
+                echo $format === 'json' ? Reports::json($report)
+                    : 'Mutation: ' . ($mutation['available'] ? 'Infection ' . $mutation['version'] : 'unavailable: ' . $mutation['reason'])
+                        . "\nUML: available (static PHP)\n";
+                return 0;
+            } catch (Throwable $error) {
+                fwrite(STDERR, 'ub-php: ' . $error->getMessage() . "\n");
+                return 3;
+            }
+        }
         $checks = [
             'php_version_id' => PHP_VERSION_ID,
             'php_supported' => version_compare(PHP_VERSION, '8.2.0', '>='),
@@ -187,90 +283,5 @@ final class Cli
         }
         return $checks['php_supported'] && $checks['analyzer']
             && $checks['composer_dependencies'] && $checks['project'] ? 0 : 3;
-    }
-
-    private function output(
-        string $format,
-        string $json,
-        array $files,
-        array $entries,
-        array $candidates,
-        bool $runCrap,
-        bool $runDry,
-        float $crapThreshold,
-        float $dryThreshold,
-    ): void {
-        if ($format === 'json') {
-            echo $json;
-            return;
-        }
-
-        if ($runCrap) {
-            echo 'CRAP (' . count($entries) . " entries)\n";
-        }
-        foreach ($entries as $entry) {
-            $value = $entry['crap'] === null ? 'unknown' : sprintf('%.3f', $entry['crap']);
-            echo 'CRAP ' . $value . ' CC=' . $entry['complexity'] . ' '
-                . $entry['file'] . ':' . $entry['start_line'] . ' ' . $entry['name'] . "\n";
-        }
-
-        $groups = [];
-        foreach ($candidates as $candidate) {
-            $left = $candidate['left'];
-            $key = $left['id'] . ':' . sprintf('%.3f', $candidate['score']);
-            $groups[$key]['score'] = $candidate['score'];
-            $groups[$key]['left'] = $left;
-            $groups[$key]['matches'][] = $candidate['right'];
-        }
-        if ($runDry) {
-            echo 'DRY (' . count($candidates) . ' pairs)\n';
-        }
-        foreach ($groups as $group) {
-            $left = $group['left'];
-            echo 'DRY ' . sprintf('%.3f', $group['score']) . ' '
-                . $left['file'] . ':' . $left['start_line'] . '-' . $left['end_line']
-                . ' (' . count($group['matches']) . " matches)\n";
-            foreach ($group['matches'] as $match) {
-                echo '  -> ' . $match['file'] . ':' . $match['start_line'] . '-' . $match['end_line'] . "\n";
-            }
-        }
-
-        $unknown = count(array_filter($entries, static fn (array $entry): bool => $entry['coverage'] === null));
-        $failed = count(array_filter($entries, static fn (array $entry): bool => $entry['exceeded_threshold']));
-        $parts = [count($files) . ' PHP files'];
-        $parts[] = $runCrap
-            ? sprintf(
-                'CRAP %d entries (%d unknown, %d >= %.1f)',
-                count($entries),
-                $unknown,
-                $failed,
-                $crapThreshold,
-            )
-            : 'CRAP skipped';
-        $parts[] = $runDry
-            ? sprintf('DRY %d pairs in %d groups (threshold %.2f)', count($candidates), count($groups), $dryThreshold)
-            : 'DRY skipped';
-        echo 'Summary: ' . implode(' | ', $parts) . "\n";
-    }
-
-    private function writeProgress(int $completed, int $total, string $file, int &$lastWidth): void
-    {
-        $barWidth = 24;
-        $percent = $total === 0 ? 100 : (int) floor($completed * 100 / $total);
-        $filled = (int) floor($percent * $barWidth / 100);
-        if (strlen($file) > 60) {
-            $file = '...' . substr($file, -57);
-        }
-        $line = sprintf(
-            "Analyzing [%s%s] %3d%% %d/%d %s",
-            str_repeat('#', $filled),
-            str_repeat('-', $barWidth - $filled),
-            $percent,
-            $completed,
-            $total,
-            $file,
-        );
-        fwrite(STDERR, "\r" . str_pad($line, $lastWidth));
-        $lastWidth = max($lastWidth, strlen($line));
     }
 }

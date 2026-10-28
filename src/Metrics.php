@@ -26,7 +26,14 @@ final class Metrics
         return $entries;
     }
 
-    public static function dry(array $units, float $threshold, int $minLines, int $minNodes): array
+    /** @param (callable(int, int): void)|null $progress */
+    public static function dry(
+        array $units,
+        float $threshold,
+        int $minLines,
+        int $minNodes,
+        ?callable $progress = null,
+    ): array
     {
         $eligible = array_values(array_filter(
             $units,
@@ -34,6 +41,10 @@ final class Metrics
                 && $unit['end_line'] - $unit['start_line'] + 1 >= $minLines
                 && $unit['node_count'] >= $minNodes,
         ));
+        $total = count($eligible);
+        if ($progress !== null) {
+            $progress(0, $total);
+        }
         $result = [];
         foreach ($eligible as $index => $left) {
             for ($other = $index + 1; $other < count($eligible); $other++) {
@@ -58,10 +69,16 @@ final class Metrics
                     ];
                 }
             }
+            if ($progress !== null && $index + 1 < $total) {
+                $progress($index + 1, $total);
+            }
         }
         usort($result, static fn (array $a, array $b): int => ($b['score'] <=> $a['score'])
             ?: ([$a['left']['file'], $a['left']['start_line'], $a['right']['file'], $a['right']['start_line']]
                 <=> [$b['left']['file'], $b['left']['start_line'], $b['right']['file'], $b['right']['start_line']]));
+        if ($progress !== null && $total > 0) {
+            $progress($total, $total);
+        }
         return $result;
     }
 

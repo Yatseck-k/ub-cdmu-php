@@ -14,10 +14,48 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: dom
+          extensions: dom, mbstring, posix, pcntl
           tools: composer:v2
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist
       - run: composer test
       - run: composer test-consumer
       - run: php bin/ub-php --root fixtures check --format json
+
+  mutation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: dom, mbstring, posix, pcntl
+          coverage: xdebug
+          tools: composer:v2
+      - run: composer install --no-interaction --prefer-dist
+      - run: composer install --working-dir=fixtures/mutation --no-interaction --prefer-dist
+      - run: php tests/mutation.php --integration
+        env:
+          XDEBUG_MODE: coverage
+
+  uml-viewer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+          extensions: dom, mbstring
+          tools: composer:v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: composer install --no-interaction --prefer-dist
+      - run: php tests/uml.php
+        env:
+          CDMU_BROWSER_FIXTURE: /tmp/cdmu-uml-large.html
+      - run: npm install --prefix /tmp/cdmu-browser playwright@1.64.1
+      - run: /tmp/cdmu-browser/node_modules/.bin/playwright install --with-deps chromium
+      - run: node tests/uml-viewer.mjs fixtures/uml/.metrics/uml.html /tmp/cdmu-uml-large.html
+        env:
+          CDMU_PLAYWRIGHT: /tmp/cdmu-browser/node_modules/playwright/index.mjs

@@ -18,5 +18,19 @@ dryer:
 reports:
   formats: [json, edn]
   directory: .metrics
+  keep_generations: 5
 quality:
   fail_on: [exceeded_crap_threshold]
+
+# Optional commands; check still runs only CRAP and DRY.
+mutator:
+  executable: vendor/bin/infection
+  configuration: infection.json5
+  threads: 1
+  process_timeout: 600
+  min_msi: null
+  input_paths: []
+  input_exclude: []
+  keep_failed_runs: 5
+uml:
+  view_limit: 200
