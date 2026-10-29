@@ -571,7 +571,7 @@ FAULT);
         [$code, $json, $error] = command(['php', $root . '/fault-start.php', $repository . '/vendor/autoload.php', $faultRoot, $failure], $root);
         $fault = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
         ensure($code === 0 && $fault['streams'] === 0 && $fault['directories'] === ($failure === 'rollback' ? 1 : 0), 'failed initialization must close resources and roll back: ' . $failure);
-        ensure($failure !== 'rollback' || str_contains($error, 'cannot roll back mutation run directory: ' . $faultRoot), 'rollback failure must identify the path');
+        ensure($failure !== 'rollback' || str_contains($error, 'cannot roll back mutation run directory: ' . realpath($faultRoot)), 'rollback failure must identify the path');
     }
     file_put_contents($root . '/guardian-failure.php', <<<'GUARD'
 <?php
