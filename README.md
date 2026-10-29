@@ -46,3 +46,8 @@ php bin/ub-php --root fixtures check --format json
 See [CLI](docs/README.md#cli), [metric rules](docs/README.md#metrics), [architecture](docs/README.md#architecture), and [compatibility](docs/README.md#requirements). Optional Infection mutation testing and an offline PHP UML viewer are available as separate commands.
 
 The optional [`ub-mode-php`](https://github.com/Yatseck-k/ub-mode-php) agent skill is maintained as a separate project and works even when this CLI is unavailable. See [Contributing](CONTRIBUTING.md) for development guidelines.
+
+## Related projects
+
+- [`ub-mode-php`](https://github.com/Yatseck-k/ub-mode-php) — optional agent workflow that can use these analyzers.
+- [`commit_rules`](https://github.com/Yatseck-k/commit_rules) — an independent Conventional Commits skill.
