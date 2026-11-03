@@ -1,53 +1,84 @@
 # ub-cdmu-php
 
-[Русская версия](README.ru.md)
+**PHP code quality toolkit — CRAP metrics, duplication detection, mutation testing and offline UML.**
 
-Static quality gates for PHP projects. This is a Composer package for PHP 8.4.27+ or PHP 8.5.12+. It parses target source without loading or executing it. `check` reports CRAP from cyclomatic complexity and existing PHPUnit Clover line coverage, plus structural duplication candidates. Optional `mutate` (Infection) and `uml` (offline viewer) are separate commands. Python and Docker are not required.
+[Русский](README.ru.md) · [Quick start](docs/GUIDE.md) · [Full reference](docs/README.md) · [License](LICENSE)
 
-**New here? Start with the [quick guide](docs/GUIDE.md).** The [reference guide](docs/README.md) has every option and contract.
+![PHP](https://img.shields.io/badge/PHP-8.4.27%2B%20%7C%208.5.12%2B-777BB4?logo=php&logoColor=white) ![Composer](https://img.shields.io/badge/Composer-package-885630?logo=composer&logoColor=white) ![License](https://img.shields.io/badge/License-MIT-blue)
 
-Text checks show stage progress in stderr and a compact PASS/WARN/FAIL result with report paths and next steps. Use `vendor/bin/ub-php check --verbose` for every entry and match, or `--progress never` for quiet progress. Redirected text logs receive plain progress lines; JSON stays quiet unless `--progress always` is requested. Unknown coverage and duplicate candidates produce WARN with exit 0, not a verified CRAP pass. See the [CLI guide](docs/README.md#cli) for limits and exit codes.
+## Overview
 
-## Mutation and UML
+`ub-cdmu-php` is a standalone Composer toolkit for inspecting PHP code quality. The core checks **parse source code without loading or executing it**, combining cyclomatic complexity and existing PHPUnit Clover line coverage with structural duplication detection. Optional tools run mutation tests using Infection or generate a self-contained offline UML viewer. **Python and Docker are not required.**
 
-```sh
-vendor/bin/ub-php doctor --tools --format json
-vendor/bin/ub-php mutate --changed --min-msi 80
-vendor/bin/ub-php uml
-# Open .metrics/uml.html in your browser.
-```
+## What it does
 
-Mutation is explicit and runs project tests through an optional installed Infection **0.29.14**. The verified fixture uses PHP 8.2 (last verified before the package minimum increased to secure PHP builds (8.4.27 or 8.5.12)), PHPUnit 11.5 and Xdebug coverage; POSIX/PCNTL process control is required for mutation. No automatic installation occurs. UML is static, works offline, and requires no Infection. `check` still runs C+D only. See [CLI](docs/README.md#cli) for configuration, status semantics, source scope and output artifacts.
+| Command | Purpose |
+| --- | --- |
+| `check` | Run CRAP and DRY analysis together |
+| `crap` | Calculate complexity-based CRAP metrics using available coverage |
+| `dry` | Find candidates for structural code duplication |
+| `doctor` | Validate configuration and inspect optional tools |
+| `mutate` | Explicitly run optional Infection mutation analysis |
+| `uml` | Generate an offline HTML code structure viewer |
 
-## Install in a PHP project
+**Results are evidence, not guesses:** missing coverage is reported as unknown, never as a verified CRAP pass. DRY matches require developer review. By default, `check` only runs CRAP and DRY.
 
-Until the package is published, add this checkout as a local Composer path repository from the project you want to analyze:
+## Requirements
 
-```sh
+- PHP **8.4.27+ (<8.5)** or **8.5.12+ (<9.0)**.
+- Composer and PHP extensions DOM, JSON, mbstring, PCNTL and POSIX.
+- Optional: an existing PHPUnit Clover coverage report, Git for `--changed`, and a compatible locally installed Infection for `mutate`.
+
+## Quick start
+
+Until the package is published, register a local checkout as a Composer path repository **from the target PHP project**:
+
+```bash
 composer config repositories.ub-cdmu-php path /path/to/ub-cdmu-php
 composer require --dev yatseck-k/ub-cdmu-php:@dev
 vendor/bin/ub-php doctor
-vendor/bin/ub-php check --format json
+vendor/bin/ub-php check
 ```
 
-After publication, the path repository step can be replaced with a normal `composer require --dev yatseck-k/ub-cdmu-php`. The project needs an `.ub-mode.yaml` or an existing `src/` or `app/` directory. Reports are written to `.metrics/` by default. Git is needed only for `--changed`; an existing Clover report is optional.
+The project should contain an `.ub-mode.yaml` file or a `src/` or `app/` directory. Reports are saved to `.metrics/` by default.
 
-Commands: `check`, `crap`, `dry`, `doctor`, `mutate` and `uml`. Use `--changed` (needs a Git repository) to analyze staged, unstaged, and untracked PHP files in configured source directories; `uml` does not accept it. `dry --threshold 0.8` applies the stricter `ub-mode` review threshold. `--format json` prints the same canonical result written to `.metrics/`.
+### Common commands
 
-For development in this checkout:
+```bash
+vendor/bin/ub-php check --format json
+vendor/bin/ub-php check --changed
+vendor/bin/ub-php dry --threshold 0.8
+vendor/bin/ub-php doctor --tools --format json
 
-```sh
+# Optional: runs the target project's tests using installed Infection
+vendor/bin/ub-php mutate --changed --min-msi 80
+
+# Creates .metrics/uml.html — open it in a browser
+vendor/bin/ub-php uml
+```
+
+`--changed` requires Git and is not supported for `uml`. Use `--verbose` for details or `--progress never` for quiet output. Optional tools are never installed automatically.
+
+## Configuration and documentation
+
+- [Getting started](docs/GUIDE.md) · [По-русски](docs/GUIDE.ru.md)
+- [CLI, metrics, statuses, exit codes and architecture](docs/README.md) · [По-русски](docs/README.ru.md)
+- [Example configuration](.ub-mode.yaml)
+
+## Development
+
+```bash
 composer install
 composer test
 composer test-consumer
 php bin/ub-php --root fixtures check --format json
 ```
 
-See [CLI](docs/README.md#cli), [metric rules](docs/README.md#metrics), [architecture](docs/README.md#architecture), and [compatibility](docs/README.md#requirements). Optional Infection mutation testing and an offline PHP UML viewer are available as separate commands.
-
-The optional [`ub-mode-php`](https://github.com/Yatseck-k/ub-mode-php) agent skill is maintained as a separate project and works even when this CLI is unavailable. See [Contributing](CONTRIBUTING.md) for development guidelines.
-
 ## Related projects
 
-- [`ub-mode-php`](https://github.com/Yatseck-k/ub-mode-php) — optional agent workflow that can use these analyzers.
-- [`commit_rules`](https://github.com/Yatseck-k/commit_rules) — an independent Conventional Commits skill.
+- [ub-mode-php](https://github.com/Yatseck-k/ub-mode-php) — independent agent skill that can optionally use this toolkit.
+- [commit-rules](https://github.com/Yatseck-k/commit-rules) — independent Conventional Commits skill.
+
+## License
+
+[MIT](LICENSE).
