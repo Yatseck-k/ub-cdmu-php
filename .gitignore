@@ -1,0 +1,4 @@
+vendor/
+.metrics/
+coverage.xml
+.idea/

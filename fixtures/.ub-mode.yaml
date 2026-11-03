@@ -1,0 +1,6 @@
+version: 1
+project:
+  source: [plain-php, laravel, symfony, yii]
+  exclude: [plain-php/invalid]
+reports:
+  directory: .metrics
